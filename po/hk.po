@@ -4513,6 +4513,9 @@ msgstr "類似的廣播:"
 msgid "Simple"
 msgstr "簡易"
 
+msgid "Simplified Chinese"
+msgstr "簡體中文"
+
 msgid "Simple titleset (compatibility for legacy players)"
 msgstr "簡易的標題 (更好的相容性)"
 
@@ -5278,6 +5281,9 @@ msgstr ""
 
 msgid "Track"
 msgstr "軌道"
+
+msgid "Traditional Chinese"
+msgstr "繁體中文"
 
 msgid "Translation"
 msgstr "翻譯:"
