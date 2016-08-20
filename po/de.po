@@ -5,7 +5,7 @@ msgstr ""
 "Project-Id-Version: tuxbox-enigma 0.0.1\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2011-11-05 14:38+0000\n"
-"PO-Revision-Date: 2016-07-30 19:15+0200\n"
+"PO-Revision-Date: 2016-08-19 18:34+0200\n"
 "Last-Translator: mike99 <mike99@mail.to>\n"
 "Language-Team: openATV\n"
 "Language: de\n"
@@ -12190,8 +12190,12 @@ msgstr ""
 "\n"
 "Sie benötigen mindestens 300 MB freien Speicherplatz.\n"
 
-msgid "You can select with yellow the OnlineFlash Image\n or select Recovery to create a USB Disk Image for clean Install."
-msgstr "Sie können mit 'Gelb' das OnlineFlash Image auswählen\noder wählen sie 'Recovery', um ein USB-Image für eine saubere Installation zu erstellen."
+msgid ""
+"You can select with yellow the OnlineFlash Image\n"
+" or select Recovery to create a USB Disk Image for clean Install."
+msgstr ""
+"Sie können mit 'Gelb' das OnlineFlash Image auswählen\n"
+"oder wählen sie 'Recovery', um ein USB-Image für eine saubere Installation zu erstellen."
 
 #
 msgid "Full back-up on %s"
@@ -16641,6 +16645,26 @@ msgstr "Beim Versuch, PIP zu deaktivieren, wurde keine InfoBar.instance gefunden
 msgid "Aborted a pseudo recording.\n"
 msgstr "Eine Pseudo-Aufnahme wurde deaktiviert.\n"
 
+#: RecordTimer.py
+msgid "start recording"
+msgstr "Aufnahme starten"
+
+#: RecordTimer.py
+msgid "record time changed, start prepare is now: %s"
+msgstr "Aufnahmezeit geändert, startet: %s"
+
+#: RecordTimer.py
+msgid "Not enough free space to record"
+msgstr "Nicht genügend freier Speicher"
+
+#: RecordTimer.py
+msgid "zapping"
+msgstr "Umschalten"
+
+#: RecordTimer.py
+msgid "end zapping"
+msgstr "Umschalten beenden"
+
 # /data/setup.xml
 msgid "Include AIT in recordings"
 msgstr "Integriere AIT-Daten in Aufnahmen"
@@ -16698,6 +16722,12 @@ msgstr "Drücken Sie OK, um den Satelliten auszuwählen"
 # Satconfig.py
 msgid "Positioner (selecting satellites)"
 msgstr "Positioner (Satelliten auswählen)"
+
+# Satconfig.py
+msgid "You can switch with left and right this tuner types %s"
+msgstr ""
+"Hier können Sie mit Pfeiltasten Links/Rechts\n"
+"den Tuner-Typ ändern. %s"
 
 #: ParentalControlSetup.py:109 (4.2)
 msgid "Reload black-/white lists"
