@@ -1,5 +1,6 @@
 from Screens.InfoBar import InfoBar
 from Screens.Screen import Screen
+from Screens.Standby import TryQuitMainloop
 from Screens.MessageBox import MessageBox
 from Components.ActionMap import ActionMap
 from Components.ConfigList import ConfigListScreen
@@ -55,17 +56,17 @@ class MultiBootStartup(ConfigListScreen, Screen):
 		self["config"].setText(_("Select Image: %s") %self.list[self.selection])
 
 	def save(self):
-		print "[MultiBootStartuo] select new startup: ", self.list[self.selection]
+		print "[MultiBootStartup] select new startup: ", self.list[self.selection]
 		system("cp -f /boot/%s /boot/STARTUP"%self.list[self.selection])
-		self.close()
+		restartbox = self.session.openWithCallback(self.restartBOX,MessageBox,_("Do you want to reboot now with selected image?"), MessageBox.TYPE_YESNO)
 
 	def cancel(self):
 		self.close()
 
 	def left(self):
-		self.selection = self.selection + 1
-		if self.selection == len(self.list):
-			self.selection = 0
+		self.selection = self.selection - 1
+		if self.selection == -1:
+			self.selection = len(self.list) - 1
 		self.startup()
 
 	def right(self):
@@ -90,3 +91,9 @@ class MultiBootStartup(ConfigListScreen, Screen):
 				if cmdline in Harddisk.getextdevices("ext4") and not name == "STARTUP":
 					files.append(name)
 		return files
+
+	def restartBOX(self, answer):
+		if answer is True:
+			self.session.open(TryQuitMainloop, 2)
+		else:
+			self.close()
