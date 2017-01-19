@@ -60,6 +60,8 @@ class Language:
 		self.addLanguage("Português do Brasil", "pt", "BR", "ISO-8859-15")
 		self.addLanguage("Romanian", "ro", "RO", "ISO-8859-15")
 		self.addLanguage("Русский", "ru", "RU", "ISO-8859-15")
+		self.addLanguage("SChinese", "zh", "CN", "UTF-8")
+		self.addLanguage("TChinses", "zh", "HK", "UTF-8")
 		self.addLanguage("Slovensky", "sk", "SK", "ISO-8859-15")
 		self.addLanguage("Slovenščina", "sl", "SI", "ISO-8859-15")
 		self.addLanguage("Srpski", "sr", "YU", "ISO-8859-15")
