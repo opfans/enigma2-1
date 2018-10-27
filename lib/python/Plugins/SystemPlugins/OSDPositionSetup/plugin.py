@@ -1,6 +1,5 @@
 from Screens.Screen import Screen
-from Components.ConfigList import ConfigListScreen
-from Components.config import config, ConfigSubsection, ConfigInteger, ConfigSlider, getConfigListEntry
+from Components.config import config, ConfigSubsection, ConfigInteger
 
 config.plugins.OSDPositionSetup = ConfigSubsection()
 config.plugins.OSDPositionSetup.dst_left = ConfigInteger(default = 0)
@@ -14,10 +13,10 @@ def setPosition(dst_left, dst_width, dst_top, dst_height):
 	if dst_top + dst_height > 576:
 		dst_height = 576 - dst_top
 	try:
-		open("/proc/stb/fb/dst_left", "w").write('%X' % dst_left)
-		open("/proc/stb/fb/dst_width", "w").write('%X' % dst_width)
-		open("/proc/stb/fb/dst_top", "w").write('%X' % dst_top)
-		open("/proc/stb/fb/dst_height", "w").write('%X' % dst_height)
+		open("/proc/stb/fb/dst_left", "w").write('%08x' % dst_left)
+		open("/proc/stb/fb/dst_width", "w").write('%08x' % dst_width)
+		open("/proc/stb/fb/dst_top", "w").write('%08x' % dst_top)
+		open("/proc/stb/fb/dst_height", "w").write('%08x' % dst_height)
 	except:
 		return
 
@@ -29,7 +28,7 @@ def main(session, **kwargs):
 	session.open(OverscanWizard, timeOut=False)
 
 def startSetup(menuid):
-	return menuid == "system" and [(_("Overscan wizard"), main, "sd_position_setup", 0)] or []
+	return menuid == "video" and [(_("Overscan wizard"), main, "sd_position_setup", 0)] or []
 
 def startup(reason, **kwargs):
 	setConfiguredPosition()

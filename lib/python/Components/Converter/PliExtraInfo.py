@@ -4,9 +4,53 @@ from enigma import iServiceInformation, iPlayableService
 from Components.Converter.Converter import Converter
 from Components.Element import cached
 from Components.config import config
-from Tools.Transponder import ConvertToHumanReadable, getChannelNumber
+from Tools.Transponder import ConvertToHumanReadable
 from Tools.GetEcmInfo import GetEcmInfo
 from Poll import Poll
+
+caid_data = (
+	( "0x100",  "0x1ff", "Seca",     "S",  True  ),
+	( "0x500",  "0x5ff", "Via",      "V",  True  ),
+	( "0x600",  "0x6ff", "Irdeto",   "I",  True  ),
+	( "0x900",  "0x9ff", "NDS",      "Nd", True  ),
+	( "0xb00",  "0xbff", "Conax",    "Co", True  ),
+	( "0xd00",  "0xdff", "CryptoW",  "Cw", True  ),
+	( "0xe00",  "0xeff", "PowerVU",  "P",  False ),
+	("0x1000", "0x10FF", "Tandberg", "TB", False ),
+	("0x1700", "0x17ff", "Beta",     "B",  True  ),
+	("0x1800", "0x18ff", "Nagra",    "N",  True  ),
+	("0x2600", "0x2600", "Biss",     "Bi", False ),
+	("0x4ae0", "0x4ae1", "Dre",      "D",  False ),
+	("0x4aee", "0x4aee", "BulCrypt", "B1", False ),
+	("0x5581", "0x5581", "BulCrypt", "B2", False )
+)
+
+# stream type to codec map
+codec_data = {
+	-1: "N/A",
+	0: "MPEG2",
+	1: "AVC",
+	2: "H263",
+	3: "VC1",
+	4: "MPEG4-VC",
+	5: "VC1-SM",
+	6: "MPEG1",
+	7: "HEVC",
+	8: "VP8",
+	9: "VP9",
+	10: "XVID",
+	11: "N/A 11",
+	12: "N/A 12",
+	13: "DIVX 3.11",
+	14: "DIVX 4",
+	15: "DIVX 5",
+	16: "AVS",
+	17: "N/A 17",
+	18: "VP6",
+	19: "N/A 19",
+	20: "N/A 20",
+	21: "SPARK",
+}
 
 def addspace(text):
 	if text:
@@ -20,22 +64,6 @@ class PliExtraInfo(Poll, Converter, object):
 		self.type = type
 		self.poll_interval = 1000
 		self.poll_enabled = True
-		self.caid_data = (
-			( "0x100",  "0x1ff", "Seca",     "S",  True  ),
-			( "0x500",  "0x5ff", "Via",      "V",  True  ),
-			( "0x600",  "0x6ff", "Irdeto",   "I",  True  ),
-			( "0x900",  "0x9ff", "NDS",      "Nd", True  ),
-			( "0xb00",  "0xbff", "Conax",    "Co", True  ),
-			( "0xd00",  "0xdff", "CryptoW",  "Cw", True  ),
-			( "0xe00",  "0xeff", "PowerVU",  "P",  False ),
-			("0x1000", "0x10FF", "Tandberg", "TB", False ),
-			("0x1700", "0x17ff", "Beta",     "B",  True  ),
-			("0x1800", "0x18ff", "Nagra",    "N",  True  ),
-			("0x2600", "0x2600", "Biss",     "Bi", False ),
-			("0x4ae0", "0x4ae1", "Dre",      "D",  False ),
-			("0x4aee", "0x4aee", "BulCrypt", "B1", False ),
-			("0x5581", "0x5581", "BulCrypt", "B2", False )
-		)
 		self.ca_table = (
 			("CryptoCaidSecaAvailable",	"S",	False),
 			("CryptoCaidViaAvailable",	"V",	False),
@@ -70,7 +98,7 @@ class PliExtraInfo(Poll, Converter, object):
 		self.feraw = self.fedata = self.updateFEdata = None
 
 	def getCryptoInfo(self, info):
-		if (info.getInfo(iServiceInformation.sIsCrypted) == 1):
+		if info.getInfo(iServiceInformation.sIsCrypted) == 1:
 			data = self.ecmdata.getEcmData()
 			self.current_source = data[0]
 			self.current_caid = data[1]
@@ -86,14 +114,14 @@ class PliExtraInfo(Poll, Converter, object):
 		res = ""
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
 
-		for caid_entry in self.caid_data:
-			if int(self.current_caid, 16) >= int(caid_entry[0], 16) and int(self.current_caid, 16) <= int(caid_entry[1], 16):
+		for caid_entry in caid_data:
+			if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
 				color="\c0000??00"
 			else:
 				color = "\c007?7?7?"
 				try:
 					for caid in available_caids:
-						if caid >= int(caid_entry[0], 16) and caid <= int(caid_entry[1], 16):
+						if int(caid_entry[0], 16) <= caid <= int(caid_entry[1], 16):
 							color="\c00????00"
 				except:
 					pass
@@ -108,8 +136,8 @@ class PliExtraInfo(Poll, Converter, object):
 	def createCryptoSpecial(self, info):
 		caid_name = "FTA"
 		try:
-			for caid_entry in self.caid_data:
-				if int(self.current_caid, 16) >= int(caid_entry[0], 16) and int(self.current_caid, 16) <= int(caid_entry[1], 16):
+			for caid_entry in caid_data:
+				if int(caid_entry[0], 16) <= int(self.current_caid, 16) <= int(caid_entry[1], 16):
 					caid_name = caid_entry[2]
 					break
 			return caid_name + ":%04x:%04x:%04x:%04x" % (int(self.current_caid,16), int(self.current_provid,16), info.getInfo(iServiceInformation.sSID), int(self.current_ecmpid,16))
@@ -124,10 +152,11 @@ class PliExtraInfo(Poll, Converter, object):
 		yres = info.getInfo(iServiceInformation.sVideoHeight)
 		mode = ("i", "p", " ")[info.getInfo(iServiceInformation.sProgressive)]
 		fps  = str((info.getInfo(iServiceInformation.sFrameRate) + 500) / 1000)
-		return str(xres) + "x" + str(yres) + mode + fps
+		gamma = ("SDR", "HDR", "HDR10", "HLG", "")[info.getInfo(iServiceInformation.sGamma)]
+		return str(xres) + "x" + str(yres) + mode + fps + addspace(gamma)
 
 	def createVideoCodec(self, info):
-		return ("MPEG2", "AVC", "MPEG1", "MPEG4-VC", "VC1", "VC1-SM", "HEVC", "")[info.getInfo(iServiceInformation.sVideoType)]
+		return codec_data.get(info.getInfo(iServiceInformation.sVideoType), "N/A")
 
 	def createPIDInfo(self, info):
 		vpid = info.getInfo(iServiceInformation.sVideoPID)
@@ -144,15 +173,18 @@ class PliExtraInfo(Poll, Converter, object):
 		if onid < 0 : onid = 0
 		return "%d-%d:%05d:%04d:%04d:%04d" % (onid, tsid, sidpid, vpid, apid, pcrpid)
 
-	def createTransponderInfo(self, fedata, feraw):
+	def createTransponderInfo(self, fedata, feraw, info):
 		if not feraw:
+			refstr = info.getInfoString(iServiceInformation.sServiceref)
+			if "%3a//" in refstr.lower():
+				return refstr.split(":")[10].replace("%3a", ":").replace("%3A", ":")
 			return ""
 		elif "DVB-T" in feraw.get("tuner_type"):
 			tmp = addspace(self.createChannelNumber(fedata, feraw)) + addspace(self.createFrequency(feraw)) + addspace(self.createPolarization(fedata))
 		else:
 			tmp = addspace(self.createFrequency(feraw)) + addspace(self.createPolarization(fedata))
 		return addspace(self.createTunerSystem(fedata)) + tmp + addspace(self.createSymbolRate(fedata, feraw)) + addspace(self.createFEC(fedata, feraw)) \
-			+ addspace(self.createModulation(fedata)) + addspace(self.createOrbPos(feraw))
+			+ addspace(self.createModulation(fedata)) + addspace(self.createOrbPos(feraw)) + addspace(self.createMisPls(fedata))
 
 	def createFrequency(self, feraw):
 		frequency = feraw.get("frequency")
@@ -226,6 +258,14 @@ class PliExtraInfo(Poll, Converter, object):
 	def createProviderName(self, info):
 		return info.getInfoString(iServiceInformation.sProvider)
 
+	def createMisPls(self, fedata):
+		tmp = ""
+		if fedata.get("is_id") > -1:
+			tmp = "MIS %d" % fedata.get("is_id")
+		if fedata.get("pls_code") > 0:
+			tmp = addspace(tmp) + "%s %d" % (fedata.get("pls_mode"), fedata.get("pls_code"))
+		return tmp
+
 	@cached
 	def getText(self):
 		service = self.source.service
@@ -274,11 +314,11 @@ class PliExtraInfo(Poll, Converter, object):
 		if self.type == "All":
 			self.getCryptoInfo(info)
 			if config.usage.show_cryptoinfo.value:
-				return addspace(self.createProviderName(info)) + self.createTransponderInfo(fedata, feraw) + "\n" \
+				return addspace(self.createProviderName(info)) + self.createTransponderInfo(fedata, feraw, info) + "\n" \
 				+ addspace(self.createCryptoBar(info)) + addspace(self.createCryptoSpecial(info)) + "\n" \
 				+ addspace(self.createPIDInfo(info)) + addspace(self.createVideoCodec(info)) + self.createResolution(info)
 			else:
-				return addspace(self.createProviderName(info)) + self.createTransponderInfo(fedata, feraw) + "\n" \
+				return addspace(self.createProviderName(info)) + self.createTransponderInfo(fedata, feraw, info) + "\n" \
 				+ addspace(self.createCryptoBar(info)) + self.current_source + "\n" \
 				+ addspace(self.createCryptoSpecial(info)) + addspace(self.createVideoCodec(info)) + self.createResolution(info)
 
@@ -294,7 +334,7 @@ class PliExtraInfo(Poll, Converter, object):
 			+ addspace(self.createVideoCodec(info)) + self.createResolution(info)
 
 		if self.type == "TransponderInfo":
-			return self.createTransponderInfo(fedata, feraw)
+			return self.createTransponderInfo(fedata, feraw, info)
 
 		if self.type == "TransponderFrequency":
 			return self.createFrequency(feraw)
@@ -360,15 +400,15 @@ class PliExtraInfo(Poll, Converter, object):
 
 		available_caids = info.getInfoObject(iServiceInformation.sCAIDs)
 
-		for caid_entry in self.caid_data:
+		for caid_entry in caid_data:
 			if caid_entry[3] == request_caid:
-				if(request_selected):
-					if int(current_caid, 16) >= int(caid_entry[0], 16) and int(current_caid, 16) <= int(caid_entry[1], 16):
+				if request_selected:
+					if int(caid_entry[0], 16) <= int(current_caid, 16) <= int(caid_entry[1], 16):
 						return True
 				else: # request available
 					try:
 						for caid in available_caids:
-							if caid >= int(caid_entry[0], 16) and caid <= int(caid_entry[1], 16):
+							if int(caid_entry[0], 16) <= caid <= int(caid_entry[1], 16):
 								return True
 					except:
 						pass

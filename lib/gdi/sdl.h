@@ -6,7 +6,7 @@
 
 #include <SDL.h>
 
-class gSDLDC: public gMainDC, public eThread, public Object
+class gSDLDC: public gMainDC, public eThread, public sigc::trackable
 {
 private:
 	SDL_Surface *m_screen;
@@ -30,7 +30,7 @@ private:
 	void evFlip();
 
 public:
-	void setResolution(int xres, int yres);
+	void setResolution(int xres, int yres, int bpp = 32);
 	gSDLDC();
 	virtual ~gSDLDC();
 	int islocked() const { return 0; }

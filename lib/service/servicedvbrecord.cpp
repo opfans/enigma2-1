@@ -1,5 +1,6 @@
 #include <lib/service/servicedvbrecord.h>
 #include <lib/base/eerror.h>
+#include <lib/dvb/db.h>
 #include <lib/dvb/epgcache.h>
 #include <lib/dvb/metaparser.h>
 #include <lib/base/nconfig.h> 
@@ -19,6 +20,7 @@ eDVBServiceRecord::eDVBServiceRecord(const eServiceReferenceDVB &ref, bool isstr
 	m_state = stateIdle;
 	m_want_record = 0;
 	m_record_ecm = false;
+	m_packet_size = 188;
 	m_descramble = true;
 	m_is_stream_client = isstreamclient;
 	m_is_pvr = !m_ref.path.empty() && !m_is_stream_client;
@@ -45,14 +47,7 @@ void eDVBServiceRecord::serviceEvent(int event)
 		if (!m_service_handler.getDataDemux(m_demux))
 		{
 			eServiceReferenceDVB &ref = (eServiceReferenceDVB&) m_ref;
-			int sid = ref.getParentServiceID().get();
-			if (!sid)
-				sid = ref.getServiceID().get();
-			if ( ref.getParentTransportStreamID().get() &&
-				ref.getParentTransportStreamID() != ref.getTransportStreamID() )
-				m_event_handler.startOther(m_demux, sid);
-			else
-				m_event_handler.start(m_demux, sid);
+			m_event_handler.start(m_demux, ref);
 		}
 
 		if (m_state == stateRecording && m_want_record)
@@ -91,9 +86,7 @@ void eDVBServiceRecord::serviceEvent(int event)
 	}
 }
 
-#define HILO(x) (x##_hi << 8 | x##_lo)
-
-RESULT eDVBServiceRecord::prepare(const char *filename, time_t begTime, time_t endTime, int eit_event_id, const char *name, const char *descr, const char *tags, bool descramble, bool recordecm)
+RESULT eDVBServiceRecord::prepare(const char *filename, time_t begTime, time_t endTime, int eit_event_id, const char *name, const char *descr, const char *tags, bool descramble, bool recordecm, int packetsize)
 {
 	bool config_recording_always_ecm = eConfigManager::getConfigBoolValue("config.recording.always_ecm", false);
 	bool config_recording_never_decrypt = eConfigManager::getConfigBoolValue("config.recording.never_decrypt", false);
@@ -102,6 +95,7 @@ RESULT eDVBServiceRecord::prepare(const char *filename, time_t begTime, time_t e
 	m_streaming = 0;
 	m_descramble = config_recording_never_decrypt ? false : descramble;
 	m_record_ecm = config_recording_always_ecm ? true : recordecm;
+	m_packet_size = packetsize;
 
 	if (m_state == stateIdle)
 	{
@@ -109,35 +103,30 @@ RESULT eDVBServiceRecord::prepare(const char *filename, time_t begTime, time_t e
 		if (!ret)
 		{
 			eServiceReferenceDVB ref = m_ref.getParentServiceReference();
-			ePtr<eDVBResourceManager> res_mgr;
+			ePtr<eDVBService> service;
 			eDVBMetaParser meta;
 			std::string service_data;
+
 			if (!ref.valid())
 				ref = m_ref;
-			if (!eDVBResourceManager::getInstance(res_mgr))
+
+			if (!eDVBDB::getInstance()->getService(ref, service))
 			{
-				ePtr<iDVBChannelList> db;
-				if (!res_mgr->getChannelList(db))
+				char tmp[255];
+				sprintf(tmp, "f:%x", service->m_flags);
+				service_data += tmp;
+				// cached pids
+				for (int x=0; x < eDVBService::cacheMax; ++x)
 				{
-					ePtr<eDVBService> service;
-					if (!db->getService(ref, service))
+					int entry = service->getCacheEntry((eDVBService::cacheID)x);
+					if (entry != -1)
 					{
-						char tmp[255];
-						sprintf(tmp, "f:%x", service->m_flags);
+						sprintf(tmp, ",c:%02d%04x", x, entry);
 						service_data += tmp;
-						// cached pids
-						for (int x=0; x < eDVBService::cacheMax; ++x)
-						{
-							int entry = service->getCacheEntry((eDVBService::cacheID)x);
-							if (entry != -1)
-							{
-								sprintf(tmp, ",c:%02d%04x", x, entry);
-								service_data += tmp;
-							}
-						}
 					}
 				}
 			}
+
 			meta.m_time_create = begTime;
 			meta.m_ref = m_ref;
 			meta.m_data_ok = 1;
@@ -149,6 +138,7 @@ RESULT eDVBServiceRecord::prepare(const char *filename, time_t begTime, time_t e
 			if (tags)
 				meta.m_tags = tags;
 			meta.m_scrambled = !m_descramble;
+			meta.m_packet_size = m_packet_size;
 			ret = meta.updateMeta(filename) ? -255 : 0;
 			if (!ret)
 			{
@@ -316,7 +306,7 @@ int eDVBServiceRecord::doRecord()
 			::close(fd);
 			return errNoDemuxAvailable;
 		}
-		demux->createTSRecorder(m_record);
+		demux->createTSRecorder(m_record, m_packet_size);
 		if (!m_record)
 		{
 			eDebug("[eDVBServiceRecord] no ts recorder available.");
@@ -327,7 +317,7 @@ int eDVBServiceRecord::doRecord()
 		}
 		m_record->setTargetFD(fd);
 		m_record->setTargetFilename(m_filename);
-		m_record->connectEvent(slot(*this, &eDVBServiceRecord::recordEvent), m_con_record_event);
+		m_record->connectEvent(sigc::mem_fun(*this, &eDVBServiceRecord::recordEvent), m_con_record_event);
 
 		m_target_fd = fd;
 	}
@@ -346,6 +336,34 @@ int eDVBServiceRecord::doRecord()
 		else
 		{
 			std::set<int> pids_to_record;
+
+			eServiceReferenceDVB ref = m_ref.getParentServiceReference();
+			ePtr<eDVBService> service;
+
+			if (!ref.valid())
+				ref = m_ref;
+
+			if(!eDVBDB::getInstance()->getService(ref, service))
+			{
+				// cached pids
+				for (int x = 0; x < eDVBService::cacheMax; ++x)
+				{
+					if (x == 5)
+					{
+						x += 3; // ignore cVTYPE, cACHANNEL, cAC3DELAY, cPCMDELAY
+						continue;
+					}
+					int entry = service->getCacheEntry((eDVBService::cacheID)x);
+					if (entry != -1)
+					{
+						if (eDVBService::cSUBTITLE == (eDVBService::cacheID)x)
+						{
+							entry = (entry&0xFFFF0000)>>16;
+						}
+						pids_to_record.insert(entry);
+					}
+				}
+			}
 
 			pids_to_record.insert(0); // PAT
 
@@ -483,7 +501,7 @@ RESULT eDVBServiceRecord::frontendInfo(ePtr<iFrontendInformation> &ptr)
 	return 0;
 }
 
-RESULT eDVBServiceRecord::connectEvent(const Slot2<void,iRecordableService*,int> &event, ePtr<eConnection> &connection)
+RESULT eDVBServiceRecord::connectEvent(const sigc::slot2<void,iRecordableService*,int> &event, ePtr<eConnection> &connection)
 {
 	connection = new eConnection((iRecordableService*)this, m_event.connect(event));
 	return 0;
@@ -581,7 +599,7 @@ void eDVBServiceRecord::saveCutlist()
 				eDebug("[eDVBServiceRecord] fixing up PTS failed, not saving");
 				continue;
 			}
-			eDebug("[eDVBServiceRecord] fixed up %llx to %llx (offset %llx)", i->second, p, offset);
+			eDebug("[eDVBServiceRecord] fixed up %llx to %llx (offset %jx)", i->second, p, (intmax_t)offset);
 			where = htobe64(p);
 			what = htonl(2); /* mark */
 			fwrite(&where, sizeof(where), 1, f);

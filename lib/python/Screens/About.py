@@ -1,4 +1,5 @@
 from Screen import Screen
+from Screens.MessageBox import MessageBox
 from Components.config import config
 from Components.ActionMap import ActionMap
 from Components.Sources.StaticText import StaticText
@@ -14,9 +15,8 @@ from Components.ProgressBar import ProgressBar
 from Tools.StbHardware import getFPVersion
 from enigma import eTimer, eLabel, eConsoleAppContainer
 
-from Components.HTMLComponent import HTMLComponent
 from Components.GUIComponent import GUIComponent
-import skin
+import skin, os
 
 class About(Screen):
 	def __init__(self, session):
@@ -27,31 +27,39 @@ class About(Screen):
 		AboutText = _("Hardware: ") + about.getHardwareTypeString() + "\n"
 		AboutText += _("CPU: ") + about.getCPUInfoString() + "\n"
 		AboutText += _("Image: ") + about.getImageTypeString() + "\n"
-		AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
+		AboutText += _("Build date: ") + about.getBuildDateString() + "\n"
+		AboutText += _("Last upgrade: ") + about.getUpdateDateString() + "\n"
+
+		# [WanWizard] Removed until we find a reliable way to determine the installation date
+		# AboutText += _("Installed: ") + about.getFlashDateString() + "\n"
+
+		EnigmaVersion = about.getEnigmaVersionString()
+		EnigmaVersion = EnigmaVersion.rsplit("-", EnigmaVersion.count("-") - 2)
+		if len(EnigmaVersion) == 3:
+			EnigmaVersion = EnigmaVersion[0] + " (" + EnigmaVersion[2] + "-" + EnigmaVersion[1] + ")"
+		else:
+			EnigmaVersion = EnigmaVersion[0] + " (" + EnigmaVersion[1] + ")"
+		EnigmaVersion = _("Enigma version: ") + EnigmaVersion
+		self["EnigmaVersion"] = StaticText(EnigmaVersion)
+		AboutText += "\n" + EnigmaVersion + "\n"
+
 		AboutText += _("Kernel version: ") + about.getKernelVersionString() + "\n"
 
-		EnigmaVersion = "Enigma: " + about.getEnigmaVersionString()
-		self["EnigmaVersion"] = StaticText(EnigmaVersion)
-		AboutText += EnigmaVersion + "\n"
-		AboutText += _("Enigma (re)starts: %d\n") % config.misc.startCounter.value
+		AboutText += _("DVB driver version: ") + about.getDriverInstalledDate() + "\n"
 
-		GStreamerVersion = "GStreamer: " + about.getGStreamerVersionString().replace("GStreamer","")
+		GStreamerVersion = _("GStreamer version: ") + about.getGStreamerVersionString().replace("GStreamer","")
 		self["GStreamerVersion"] = StaticText(GStreamerVersion)
 		AboutText += GStreamerVersion + "\n"
 
-		ImageVersion = _("Last upgrade: ") + about.getImageVersionString()
-		self["ImageVersion"] = StaticText(ImageVersion)
-		AboutText += ImageVersion + "\n"
-
-		AboutText += _("DVB drivers: ") + about.getDriverInstalledDate() + "\n"
-
 		AboutText += _("Python version: ") + about.getPythonVersionString() + "\n"
+
+		AboutText += _("Enigma (re)starts: %d\n") % config.misc.startCounter.value
 
 		fp_version = getFPVersion()
 		if fp_version is None:
 			fp_version = ""
 		else:
-			fp_version = _("Frontprocessor version: %d") % fp_version
+			fp_version = _("Frontprocessor version: %s") % fp_version
 			AboutText += fp_version + "\n"
 
 		self["FPVersion"] = StaticText(fp_version)
@@ -59,7 +67,7 @@ class About(Screen):
 		self["TunerHeader"] = StaticText(_("Detected NIMs:"))
 		AboutText += "\n" + _("Detected NIMs:") + "\n"
 
-		nims = nimmanager.nimList(showFBCTuners=False)
+		nims = nimmanager.nimListCompressed()
 		for count in range(len(nims)):
 			if count < 4:
 				self["Tuner" + str(count)] = StaticText(nims[count])
@@ -92,6 +100,7 @@ class About(Screen):
 		self["AboutScrollLabel"] = ScrollLabel(AboutText)
 		self["key_green"] = Button(_("Translations"))
 		self["key_red"] = Button(_("Latest Commits"))
+		self["key_yellow"] = Button(_("Troubleshoot"))
 		self["key_blue"] = Button(_("Memory Info"))
 
 		self["actions"] = ActionMap(["ColorActions", "SetupActions", "DirectionActions"],
@@ -101,6 +110,7 @@ class About(Screen):
 				"red": self.showCommits,
 				"green": self.showTranslationInfo,
 				"blue": self.showMemoryInfo,
+				"yellow": self.showTroubleshoot,
 				"up": self["AboutScrollLabel"].pageUp,
 				"down": self["AboutScrollLabel"].pageDown
 			})
@@ -113,6 +123,9 @@ class About(Screen):
 
 	def showMemoryInfo(self):
 		self.session.open(MemoryInfo)
+
+	def showTroubleshoot(self):
+		self.session.open(Troubleshoot)
 
 class TranslationInfo(Screen):
 	def __init__(self, session):
@@ -170,17 +183,23 @@ class CommitInfo(Screen):
 
 		self["key_red"] = Button(_("Cancel"))
 
+		# get the branch to display from the Enigma version
+		try:
+			branch = "?sha=" + "-".join(about.getEnigmaVersionString().split("-")[3:])
+		except:
+			branch = ""
+
 		self.project = 0
 		self.projects = [
-			("enigma2", "Enigma2"),
-			("openpli-oe-core", "Openpli Oe Core"),
-			("enigma2-plugins", "Enigma2 Plugins"),
-			("aio-grab", "Aio Grab"),
-			("gst-plugin-dvbmediasink", "Gst Plugin Dvbmediasink"),
-			("HenksatSettings", "Henksat Settings"),
-			("enigma2-plugin-extensions-xmltvimport", "Plugin Xmltvimport"),
-			("enigma2-plugin-skins-magic", "Skin Magic SD"),
-			("tuxtxt", "Tuxtxt")
+			("https://api.github.com/repos/openpli/enigma2/commits" + branch, "Enigma2"),
+			("https://api.github.com/repos/openpli/openpli-oe-core/commits" + branch, "Openpli Oe Core"),
+			("https://api.github.com/repos/openpli/enigma2-plugins/commits", "Enigma2 Plugins"),
+			("https://api.github.com/repos/openpli/aio-grab/commits", "Aio Grab"),
+			("https://api.github.com/repos/openpli/enigma2-plugin-extensions-epgimport/commits", "Plugin EPGImport"),
+			("https://api.github.com/repos/openpli/enigma2-plugin-skins-magic/commits", "Skin Magic SD"),
+			("https://api.github.com/repos/littlesat/skin-PLiHD/commits", "Skin PLi HD"),
+			("https://api.github.com/repos/E2OpenPlugins/e2openplugin-OpenWebif/commits", "OpenWebif"),
+			("https://api.github.com/repos/haroo/HansSettings/commits", "Hans settings")
 		]
 		self.cachedProjects = {}
 		self.Timer = eTimer()
@@ -188,7 +207,7 @@ class CommitInfo(Screen):
 		self.Timer.start(50, True)
 
 	def readGithubCommitLogs(self):
-		url = 'https://api.github.com/repos/openpli/%s/commits' % self.projects[self.project][0]
+		url = self.projects[self.project][0]
 		commitlog = ""
 		from datetime import datetime
 		from json import loads
@@ -215,7 +234,7 @@ class CommitInfo(Screen):
 		self["AboutScrollLabel"].setText(commitlog)
 
 	def updateCommitLogs(self):
-		if self.cachedProjects.has_key(self.projects[self.project][1]):
+		if self.projects[self.project][1] in self.cachedProjects:
 			self["AboutScrollLabel"].setText(self.cachedProjects[self.projects[self.project][1]])
 		else:
 			self["AboutScrollLabel"].setText(_("Please wait"))
@@ -303,7 +322,7 @@ class MemoryInfo(Screen):
 		open("/proc/sys/vm/drop_caches", "w").write("3")
 		self.getMemoryInfo()
 
-class MemoryInfoSkinParams(HTMLComponent, GUIComponent):
+class MemoryInfoSkinParams(GUIComponent):
 	def __init__(self):
 		GUIComponent.__init__(self)
 		self.rows_in_column = 25
@@ -316,5 +335,124 @@ class MemoryInfoSkinParams(HTMLComponent, GUIComponent):
 					self.rows_in_column = int(value)
 			self.skinAttributes = attribs
 		return GUIComponent.applySkin(self, desktop, screen)
-
+	
 	GUI_WIDGET = eLabel
+
+class Troubleshoot(Screen):
+	def __init__(self, session):
+		Screen.__init__(self, session)
+		self.setTitle(_("Troubleshoot"))
+		self["AboutScrollLabel"] = ScrollLabel(_("Please wait"))
+		self["key_red"] = Button()
+		self["key_green"] = Button()
+
+		self["actions"] = ActionMap(["OkCancelActions", "DirectionActions", "ColorActions"],
+			{
+				"cancel": self.close,
+				"up": self["AboutScrollLabel"].pageUp,
+				"down": self["AboutScrollLabel"].pageDown,
+				"left": self.left,
+				"right": self.right,
+				"red": self.red,
+				"green": self.green,
+			})
+
+		self.container = eConsoleAppContainer()
+		self.container.appClosed.append(self.appClosed)
+		self.container.dataAvail.append(self.dataAvail)
+		self.commandIndex = 0
+		self.updateOptions()
+		self.onLayoutFinish.append(self.run_console)
+
+	def left(self):
+		self.commandIndex = (self.commandIndex - 1) % len(self.commands)
+		self.updateKeys()
+		self.run_console()
+
+	def right(self):
+		self.commandIndex = (self.commandIndex + 1) % len(self.commands)
+		self.updateKeys()
+		self.run_console()
+
+	def red(self):
+		if self.commandIndex >= self.numberOfCommands:
+			self.session.openWithCallback(self.removeAllLogfiles, MessageBox, _("Do you want to remove all the crahs logfiles"), default=False)
+		else:
+			self.close()
+
+	def green(self):
+		if self.commandIndex >= self.numberOfCommands:
+			try:
+				os.remove(self.commands[self.commandIndex][4:])
+			except:
+				pass
+			self.updateOptions()
+		self.run_console()
+
+	def removeAllLogfiles(self, answer):
+		if answer:
+			for fileName in self.getLogFilesList():
+				try:
+					os.remove(fileName)
+				except:
+					pass
+			self.updateOptions()
+			self.run_console()
+
+	def appClosed(self, retval):
+		if retval:
+			self["AboutScrollLabel"].setText(_("An error occurred - Please try again later"))
+
+	def dataAvail(self, data):
+		self["AboutScrollLabel"].appendText(data)
+
+	def run_console(self):
+		self["AboutScrollLabel"].setText("")
+		self.setTitle("%s - %s" % (_("Troubleshoot"), self.titles[self.commandIndex]))
+		command = self.commands[self.commandIndex]
+		if command.startswith("cat "):
+			try:
+				self["AboutScrollLabel"].setText(open(command[4:], "r").read())
+			except:
+				self["AboutScrollLabel"].setText(_("Logfile does not exist anymore"))
+		else:
+			try:
+				if self.container.execute(command):
+					raise Exception, "failed to execute: ", command
+			except Exception, e:
+				self["AboutScrollLabel"].setText("%s\n%s" % (_("An error occurred - Please try again later"), e))
+
+	def cancel(self):
+		self.container.appClosed.remove(self.appClosed)
+		self.container.dataAvail.remove(self.dataAvail)
+		self.container = None
+		self.close()
+
+	def getLogFilesList(self):
+		import glob
+		home_root = "/home/root/enigma2_crash.log"
+		tmp = "/tmp/enigma2_crash.log"
+		return [x for x in sorted(glob.glob("/mnt/hdd/*.log"), key=lambda x: os.path.isfile(x) and os.path.getmtime(x))] + (os.path.isfile(home_root) and [home_root] or []) + (os.path.isfile(tmp) and [tmp] or [])
+
+	def updateOptions(self):
+		self.titles = ["dmesg", "ifconfig", "df", "top", "ps", "messages"]
+		self.commands = ["dmesg", "ifconfig", "df -h", "top -n 1", "ps", "cat /var/volatile/log/messages"]
+		install_log = "/home/root/autoinstall.log"
+		if os.path.isfile(install_log):
+				self.titles.append("%s" % install_log)
+				self.commands.append("cat %s" % install_log)
+		self.numberOfCommands = len(self.commands)
+		fileNames = self.getLogFilesList()
+		if fileNames:
+			totalNumberOfLogfiles = len(fileNames)
+			logfileCounter = 1
+			for fileName in reversed(fileNames):
+				self.titles.append("logfile %s (%s/%s)" % (fileName, logfileCounter, totalNumberOfLogfiles))
+				self.commands.append("cat %s" % (fileName))
+				logfileCounter += 1
+		self.commandIndex = min(len(self.commands) - 1, self.commandIndex)
+		self.updateKeys()
+
+	def updateKeys(self):
+		self["key_red"].setText(_("Cancel") if self.commandIndex < self.numberOfCommands else _("Remove all logfiles"))
+		self["key_green"].setText(_("Refresh") if self.commandIndex < self.numberOfCommands else _("Remove this logfile"))

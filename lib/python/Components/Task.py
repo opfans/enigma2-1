@@ -91,7 +91,7 @@ class Job(object):
 			if cb_idx in self.resident_tasks:
 				print "resident task finished:", task
 				self.resident_tasks.remove(cb_idx)
-		if res == []:
+		if not res:
 			self.state_changed()
 			self.current_task += 1
 			self.runNext()
@@ -491,7 +491,7 @@ class ToolExistsPrecondition(Condition):
 
 class AbortedPostcondition(Condition):
 	def getErrorMessage(self, task):
-		return "Cancelled upon user request"
+		return _("Cancelled upon user request")
 
 class ReturncodePostcondition(Condition):
 	def check(self, task):

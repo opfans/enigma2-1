@@ -25,10 +25,10 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 
 		self["setupActions"] = ActionMap(["SetupActions", "ColorActions"],
 		{
-		    "green": self.ok,
-		    "red": self.cancel,
-		    "cancel": self.cancel,
-		    "ok": self.ok,
+			"green": self.ok,
+			"red": self.cancel,
+			"cancel": self.cancel,
+			"ok": self.ok,
 		}, -2)
 
 	def createSetup(self):
@@ -46,7 +46,7 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 		if int(config.usage.inactivity_timer.value):
 			self.list.append(getConfigListEntry(_("Specify timeframe to ignore inactivity sleeptimer"),
 				config.usage.inactivity_timer_blocktime,
-				_("When enabled you can specify a timeframe were the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
+				_("When enabled you can specify a timeframe when the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
 			if config.usage.inactivity_timer_blocktime.value:
 				self.list.append(getConfigListEntry(_("Set blocktimes by weekday"),
 					config.usage.inactivity_timer_blocktime_by_weekdays,
@@ -64,7 +64,7 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 								_("Specify the end time until the inactivity sleeptimer should be ignored")))
 							self.list.append(getConfigListEntry(_("Specify extra timeframe to ignore inactivity sleeptimer"),
 								config.usage.inactivity_timer_blocktime_extra_day[i],
-								_("When enabled you can specify an extra timeframe were the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
+								_("When enabled you can specify an extra timeframe when the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
 							if config.usage.inactivity_timer_blocktime_extra_day[i].value:
 								self.list.append(getConfigListEntry(_("Extra start time to ignore inactivity sleeptimer"),
 									config.usage.inactivity_timer_blocktime_extra_begin_day[i],
@@ -81,7 +81,7 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 						_("Specify the end time until the inactivity sleeptimer should be ignored")))
 					self.list.append(getConfigListEntry(_("Specify extra timeframe to ignore inactivity sleeptimer"),
 						config.usage.inactivity_timer_blocktime_extra,
-						_("When enabled you can specify an extra timeframe were the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
+						_("When enabled you can specify an extra timeframe when the inactivity sleeptimer is ignored. Not the detection is disabled during this timeframe but the inactivity timeout is disabled")))
 					if config.usage.inactivity_timer_blocktime_extra.value:
 						self.list.append(getConfigListEntry(_("Extra start time to ignore inactivity sleeptimer"),
 							config.usage.inactivity_timer_blocktime_extra_begin,
@@ -106,7 +106,7 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 		self.list.append(getConfigListEntry(_("Enable wakeup timer"),
 			config.usage.wakeup_enabled,
 			_("Note: when enabled, and you do want standby mode after wake up, set option 'Startup to Standby' as 'No, except Wakeup timer'.")))
-		if config.usage.wakeup_enabled.value:
+		if config.usage.wakeup_enabled.value != "no":
 			for i in range(7):
 				self.list.append(getConfigListEntry([_("Monday"), _("Tuesday"), _("Wednesday"), _("Thursday"), _("Friday"), _("Saturday"), _("Sunday")][i],
 					config.usage.wakeup_day[i]))
@@ -152,7 +152,7 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 
 	def currentEventTime(self):
 		remaining = 0
-		ref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+		ref = self.session.nav.getCurrentlyPlayingServiceReference()
 		if ref:
 			path = ref.getPath()
 			if path: # Movie
@@ -174,10 +174,19 @@ class SleepTimerEdit(ConfigListScreen, Screen):
 					duration = event.getDuration()
 					end = start + duration
 					remaining = end - now
-		return remaining + config.recording.margin_after.value * 60
+		if remaining > 0:
+			return remaining + config.recording.margin_after.value * 60
+		return remaining
 
-def isNextWakeupTime():
-	if config.usage.wakeup_enabled.value:
+def isNextWakeupTime(standby_timer=False):
+	wakeup_enabled = config.usage.wakeup_enabled.value
+	if wakeup_enabled != "no":
+		if not standby_timer:
+			if wakeup_enabled == "standby":
+				return -1
+		else:
+			if wakeup_enabled == "deepstandby":
+				return -1
 		wakeup_day, wakeup_time = WakeupDayTimeOfWeek()
 		if wakeup_day == -1:
 				return -1

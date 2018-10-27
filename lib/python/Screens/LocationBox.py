@@ -29,7 +29,7 @@ from Components.MenuList import MenuList
 # Timer
 from enigma import eTimer
 
-defaultInhibitDirs = ["/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/sbin", "/sys", "/usr", "/var"]
+defaultInhibitDirs = ["/bin", "/boot", "/dev", "/etc", "/lib", "/proc", "/sbin", "/sys", "/var"]
 
 class LocationBox(Screen, NumericalTextInput, HelpableScreen):
 	"""Simple Class similar to MessageBox / ChoiceBox but used to choose a folder/pathname combination"""
@@ -192,7 +192,7 @@ class LocationBox(Screen, NumericalTextInput, HelpableScreen):
 
 	def showHideRename(self):
 		# Don't allow renaming when filename is empty
-		if self.filename == "":
+		if not self.filename:
 			self["key_yellow"].hide()
 
 	def switchToFileList(self):
@@ -216,6 +216,9 @@ class LocationBox(Screen, NumericalTextInput, HelpableScreen):
 			folder = self["filelist"].getSelection()[0]
 			if folder is not None and not folder in self.bookmarks:
 				self.bookmarks.append(folder)
+				if self.bookmarks != self.realBookmarks.value:
+					self.realBookmarks.value = self.bookmarks
+					self.realBookmarks.save()
 				self.bookmarks.sort()
 				self["booklist"].setList(self.bookmarks)
 		else:
@@ -233,10 +236,13 @@ class LocationBox(Screen, NumericalTextInput, HelpableScreen):
 			return
 		if name in self.bookmarks:
 			self.bookmarks.remove(name)
+			if self.bookmarks != self.realBookmarks.value:
+				self.realBookmarks.value = self.bookmarks
+				self.realBookmarks.save()
 			self["booklist"].setList(self.bookmarks)
 
 	def createDir(self):
-		if self["filelist"].current_directory != None:
+		if self["filelist"].current_directory is not None:
 			self.session.openWithCallback(
 				self.createDirCallback,
 				InputBox,
@@ -529,7 +535,8 @@ class LocationBox(Screen, NumericalTextInput, HelpableScreen):
 		return str(type(self)) + "(" + self.text + ")"
 
 def MovieLocationBox(session, text, dir, filename = "", minFree = None):
-	return LocationBox(session, text = text,  filename = filename, currDir = dir, bookmarks = config.movielist.videodirs, autoAdd = True, editDir = True, inhibitDirs = defaultInhibitDirs, minFree = minFree)
+	config.movielist.videodirs.load()
+	return LocationBox(session, text = text,  filename = filename, currDir = dir, bookmarks = config.movielist.videodirs, autoAdd = config.movielist.add_bookmark.value , editDir = True, inhibitDirs = defaultInhibitDirs, minFree = minFree)
 
 class TimeshiftLocationBox(LocationBox):
 	def __init__(self, session):

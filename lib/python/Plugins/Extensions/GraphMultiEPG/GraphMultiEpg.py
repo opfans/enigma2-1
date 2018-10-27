@@ -1,9 +1,8 @@
-from skin import parseColor, parseFont, parseSize
+from skin import parseColor, parseFont
 from Components.config import config, ConfigClock, ConfigInteger, ConfigSubsection, ConfigYesNo, ConfigSelection, ConfigSelectionNumber
 from Components.Pixmap import Pixmap
 from Components.Button import Button
 from Components.ActionMap import HelpableActionMap
-from Components.HTMLComponent import HTMLComponent
 from Components.GUIComponent import GUIComponent
 from Components.EpgList import Rect
 from Components.Sources.Event import Event
@@ -23,13 +22,13 @@ from Screens.TimerEdit import TimerSanityConflict, TimerEditList
 from Screens.MessageBox import MessageBox
 from Screens.ChoiceBox import ChoiceBox
 from Tools.Directories import resolveFilename, SCOPE_CURRENT_SKIN
-from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT
+from RecordTimer import RecordTimerEntry, parseEvent, AFTEREVENT, createRecordTimerEntry
 from ServiceReference import ServiceReference, isPlayableForCur
 from Tools.LoadPixmap import LoadPixmap
 from Tools.Alternatives import CompareWithAlternatives
-from Tools import Notifications
-from enigma import eEPGCache, eListbox, gFont, eListboxPythonMultiContent, RT_HALIGN_LEFT, RT_HALIGN_RIGHT, RT_HALIGN_CENTER,\
-	RT_VALIGN_CENTER, RT_WRAP, BT_SCALE, BT_KEEP_ASPECT_RATIO, eSize, eRect, eTimer, getBestPlayableServiceReference, loadPNG, eServiceReference
+from Tools.FallbackTimer import FallbackTimerList
+from Tools.TextBoundary import getTextBoundarySize
+from enigma import eEPGCache, eListbox, gFont, eListboxPythonMultiContent, RT_HALIGN_LEFT, RT_HALIGN_RIGHT, RT_HALIGN_CENTER, RT_VALIGN_CENTER, RT_WRAP, BT_SCALE, BT_KEEP_ASPECT_RATIO, eSize, eRect, eTimer, loadPNG, eServiceReference
 from GraphMultiEpgSetup import GraphMultiEpgSetup
 from time import localtime, time, strftime, mktime
 from Components.PluginComponent import plugins
@@ -52,11 +51,14 @@ config.misc.graph_mepg.default_mode = ConfigYesNo(default = False)
 config.misc.graph_mepg.overjump = ConfigYesNo(default = True)
 config.misc.graph_mepg.center_timeline = ConfigYesNo(default = False)
 config.misc.graph_mepg.servicetitle_mode = ConfigSelection(default = "picon+servicename", choices = [
-	("servicename", _("Service name")),
+	("servicename", _("Servicename")),
 	("picon", _("Picon")),
-	("picon+servicename", _("Picon and service name")) ])
+	("picon+servicename", _("Picon and servicename")),
+	("number+servicename", _("Channelnumber and servicename")),
+	("number+picon", _("Channelnumber and picon")),
+	("number+picon+servicename", _("Channelnumber, picon and servicename")) ])
 config.misc.graph_mepg.roundTo = ConfigSelection(default = "900", choices = [("900", _("%d minutes") % 15), ("1800", _("%d minutes") % 30), ("3600", _("%d minutes") % 60)])
-config.misc.graph_mepg.OKButton = ConfigSelection(default = "info", choices = [("info", _("Show detailed event info")), ("zap", _("Zap to selected channel"))])
+config.misc.graph_mepg.OKButton = ConfigSelection(default = "info", choices = [("info", _("Show detailed event info")), ("zap", _("Zap to selected channel")), ("zap+exit", _("Zap to selected channel and exit GMEPG"))])
 possibleAlignmentChoices = [
 	( str(RT_HALIGN_LEFT   | RT_VALIGN_CENTER          ) , _("left")),
 	( str(RT_HALIGN_CENTER | RT_VALIGN_CENTER          ) , _("centered")),
@@ -73,8 +75,8 @@ config.misc.graph_mepg.zap_blind_bouquets = ConfigYesNo(default = False)
 
 listscreen = config.misc.graph_mepg.default_mode.value
 
-class EPGList(HTMLComponent, GUIComponent):
-	def __init__(self, selChangedCB = None, timer = None, time_epoch = 120, overjump_empty = True):
+class EPGList(GUIComponent):
+	def __init__(self, selChangedCB = None, timer = None, time_epoch = 120, overjump_empty = True, epg_bouquet=None):
 		GUIComponent.__init__(self)
 		self.cur_event = None
 		self.cur_service = None
@@ -87,37 +89,50 @@ class EPGList(HTMLComponent, GUIComponent):
 		self.l = eListboxPythonMultiContent()
 		self.l.setBuildFunc(self.buildEntry)
 		self.setOverjump_Empty(overjump_empty)
+		self.epg_bouquet = epg_bouquet
 		self.epgcache = eEPGCache.getInstance()
 		self.clocks = [ LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/epgclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/epgclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/epgclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/epgclock_prepost.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/epgclock_post.png')),
+
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zapclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zapclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zapclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zapclock_prepost.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zapclock_post.png')),
+
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zaprecclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zaprecclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zaprecclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zaprecclock_prepost.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/zaprecclock_post.png')),
+
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repepgclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repepgclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repepgclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repepgclock_prepost.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repepgclock_post.png')),
+
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzapclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzapclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzapclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzapclock_prepost.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzapclock_post.png')),
+
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock_add.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock_pre.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock.png')),
 				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock_prepost.png')),
-				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock_post.png')) ]
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/repzaprecclock_post.png')),
+
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/pipclock_add.png')),
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/pipclock_pre.png')),
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/pipclock.png')),
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/pipclock_prepost.png')),
+				LoadPixmap(cached=True, path=resolveFilename(SCOPE_CURRENT_SKIN, 'skin_default/icons/pipclock_post.png')) ]
+
 		self.time_base = None
 		self.time_epoch = time_epoch
 		self.list = None
@@ -241,12 +256,13 @@ class EPGList(HTMLComponent, GUIComponent):
 		self.setItemsPerPage()
 		return rc
 
-	def isSelectable(self, service, service_name, events, picon):
+	def isSelectable(self, service, service_name, events, picon, serviceref):
 		return (events and len(events) and True) or False
 
 	def setShowServiceMode(self, value):
 		self.showServiceTitle = "servicename" in value
 		self.showPicon = "picon" in value
+		self.showChannelNumber = "number" in value
 		self.recalcEntrySize()
 		self.selEntry(0) #Select entry again so that the clipping region gets updated if needed
 
@@ -395,6 +411,8 @@ class EPGList(HTMLComponent, GUIComponent):
 			w = width / 10 * 2;
 		else:     # if self.showPicon:    # this must be set if showServiceTitle is None
 			w = 2 * height - 2 * self.serviceBorderVerWidth  # FIXME: could do better...
+		self.number_width = self.showChannelNumber and 'FROM BOUQUET' in self.epg_bouquet.toString() and getTextBoundarySize(self.instance, self.serviceFont, self.instance.size(), "0000" if config.usage.alternative_number_mode.value else "00000").width() + 2 * self.serviceBorderVerWidth or 0
+		w = w + self.number_width
 		self.service_rect = Rect(0, 0, w, height)
 		self.event_rect = Rect(w, 0, width - w, height)
 		piconHeight = height - 2 * self.serviceBorderHorWidth
@@ -418,7 +436,7 @@ class EPGList(HTMLComponent, GUIComponent):
 		xpos, width = self.calcEntryPosAndWidthHelper(ev_start, ev_duration, time_base, time_base + time_epoch * 60, event_rect.width())
 		return xpos + event_rect.left(), width
 
-	def buildEntry(self, service, service_name, events, picon):
+	def buildEntry(self, service, service_name, events, picon, serviceref):
 		r1 = self.service_rect
 		r2 = self.event_rect
 		selected = self.cur_service[0] == service
@@ -450,20 +468,27 @@ class EPGList(HTMLComponent, GUIComponent):
 					text = "",
 					color = serviceForeColor, color_sel = serviceForeColor,
 					backcolor = serviceBackColor, backcolor_sel = serviceBackColor))
-
 		displayPicon = None
+		if self.number_width:
+			res.append(MultiContentEntryText(
+				pos = (r1.x, r1.y + self.serviceBorderHorWidth),
+				size = (self.number_width - self.serviceBorderVerWidth, r1.h * self.serviceBorderHorWidth),
+				font = 0, flags = RT_HALIGN_RIGHT | RT_VALIGN_CENTER,
+				text = serviceref and serviceref.ref and str(serviceref.ref.getChannelNum()) or "---",
+				color = serviceForeColor, color_sel = serviceForeColor,
+				backcolor = None, backcolor_sel = None))
 		if self.showPicon:
 			if picon is None: # go find picon and cache its location
 				picon = getPiconName(service)
 				curIdx = self.l.getCurrentSelectionIndex()
-				self.list[curIdx] = (service, service_name, events, picon)
+				self.list[curIdx] = (service, service_name, events, picon, serviceref)
 			piconWidth = self.picon_size.width()
 			piconHeight = self.picon_size.height()
 			if picon != "":
 				displayPicon = loadPNG(picon)
 			if displayPicon is not None:
 				res.append(MultiContentEntryPixmapAlphaTest(
-					pos = (r1.x + self.serviceBorderVerWidth, r1.y + self.serviceBorderHorWidth),
+					pos = (r1.x + self.serviceBorderVerWidth + self.number_width, r1.y + self.serviceBorderHorWidth),
 					size = (piconWidth, piconHeight),
 					png = displayPicon,
 					backcolor = None, backcolor_sel = None, flags = BT_SCALE | BT_KEEP_ASPECT_RATIO))
@@ -479,11 +504,11 @@ class EPGList(HTMLComponent, GUIComponent):
 		if self.showServiceTitle: # we have more space so reset parms
 			namefont = 0
 			namefontflag = int(config.misc.graph_mepg.servicename_alignment.value)
-			namewidth = r1.w - piconWidth
+			namewidth = r1.w - piconWidth - self.number_width
 
 		if self.showServiceTitle or displayPicon is None:
 			res.append(MultiContentEntryText(
-				pos = (r1.x + piconWidth + self.serviceBorderVerWidth + self.serviceNamePadding,
+				pos = (r1.x + piconWidth + self.serviceBorderVerWidth + self.serviceNamePadding + self.number_width,
 					r1.y + self.serviceBorderHorWidth),
 				size = (namewidth - 2 * (self.serviceBorderVerWidth + self.serviceNamePadding),
 					r1.h - 2 * self.serviceBorderHorWidth),
@@ -644,12 +669,14 @@ class EPGList(HTMLComponent, GUIComponent):
 			test = [ (service[0], 0, time_base, self.time_epoch) for service in self.list ]
 			serviceList = self.list
 			piconIdx = 3
+			channelIdx = 4
 		else:
 			self.cur_event = None
 			self.cur_service = None
 			test = [ (service.ref.toString(), 0, self.time_base, self.time_epoch) for service in services ]
 			serviceList = services
 			piconIdx = 0
+			channelIdx = None
 
 		test.insert(0, 'XRnITBD') #return record, service ref, service name, event id, event title, begin time, duration
 		epg_data = [] if self.epgcache is None else self.epgcache.lookupEvent(test)
@@ -663,7 +690,7 @@ class EPGList(HTMLComponent, GUIComponent):
 			if service != x[0]:
 				if tmp_list is not None:
 					picon = None if piconIdx == 0 else serviceList[serviceIdx][piconIdx]
-					self.list.append((service, sname, tmp_list[0][0] is not None and tmp_list or None, picon))
+					self.list.append((service, sname, tmp_list[0][0] is not None and tmp_list or None, picon, serviceList[serviceIdx] if (channelIdx is None) else serviceList[serviceIdx][channelIdx]))
 					serviceIdx += 1
 				service = x[0]
 				sname = x[1]
@@ -671,7 +698,7 @@ class EPGList(HTMLComponent, GUIComponent):
 			tmp_list.append((x[2], x[3], x[4], x[5])) #(event_id, event_title, begin_time, duration)
 		if tmp_list and len(tmp_list):
 			picon = None if piconIdx == 0 else serviceList[serviceIdx][piconIdx]
-			self.list.append((service, sname, tmp_list[0][0] is not None and tmp_list or None, picon))
+			self.list.append((service, sname, tmp_list[0][0] is not None and tmp_list or None, picon, serviceList[serviceIdx] if (channelIdx is None) else serviceList[serviceIdx][channelIdx]))
 			serviceIdx += 1
 
 		self.l.setList(self.list)
@@ -694,7 +721,7 @@ class EPGList(HTMLComponent, GUIComponent):
 	def resetOffset(self):
 		self.offs = 0
 
-class TimelineText(HTMLComponent, GUIComponent):
+class TimelineText(GUIComponent):
 	def __init__(self):
 		GUIComponent.__init__(self)
 		self.l = eListboxPythonMultiContent()
@@ -848,7 +875,8 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		self["list"] = EPGList( selChangedCB = self.onSelectionChanged,
 					timer = self.session.nav.RecordTimer,
 					time_epoch = config.misc.graph_mepg.prev_time_period.value,
-					overjump_empty = config.misc.graph_mepg.overjump.value)
+					overjump_empty = config.misc.graph_mepg.overjump.value,
+					epg_bouquet = epg_bouquet)
 
 		HelpableScreen.__init__(self)
 		self["okactions"] = HelpableActionMap(self, "OkCancelActions",
@@ -900,6 +928,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		self.updateTimelineTimer.start(60 * 1000)
 		self.onLayoutFinish.append(self.onCreate)
 		self.previousref = self.session.nav.getCurrentlyPlayingServiceOrGroup()
+		self.fallbackTimer = FallbackTimerList(self, self.onCreate)
 
 	def prevPage(self):
 		self.showhideWindow(True)
@@ -942,9 +971,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		self.updEvent(+3)
 
 	def updEvent(self, dir, visible = True):
-		self.showhideWindow(True)
-		ret = self["list"].selEntry(dir, visible)
-		if ret:
+		if self["list"].selEntry(dir, visible):
 			if self["list"].offs > 0:
 				self.time_mode = self.TIME_CHANGE
 			else:
@@ -1152,7 +1179,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		self["timeline_text"].setDateFormat(config.misc.graph_mepg.servicetitle_mode.value)
 		l.fillMultiEPG(self.services, self.ask_time)
 		l.moveToService(self.serviceref)
-		l.setCurrentlyPlaying(self.serviceref)
+		l.setCurrentlyPlaying(self.previousref)
 		self.moveTimeLines()
 
 	def eventViewCallback(self, setEvent, setService, val):
@@ -1182,7 +1209,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 				from Components.ServiceEventTracker import InfoBarCount
 				preview = InfoBarCount > 1
 				self.zapFunc(ref.ref, preview)
-				if self.previousref and self.previousref == ref.ref and not preview:
+				if config.misc.graph_mepg.OKButton.value == "zap+exit" or self.previousref and self.previousref == ref.ref and not preview:
 					config.misc.graph_mepg.save()
 					self.close(True)
 				self.previousref = ref.ref
@@ -1201,10 +1228,13 @@ class GraphMultiEPG(Screen, HelpableScreen):
 			self.zapTo()
 
 	def removeTimer(self, timer):
-		timer.afterEvent = AFTEREVENT.NONE
-		self.session.nav.RecordTimer.removeEntry(timer)
-		self["key_green"].setText(_("Add timer"))
-		self.key_green_choice = self.ADD_TIMER
+		if timer.external:
+			self.fallbackTimer.removeTimer(timer, self.onSelectionChanged)
+		else:
+			timer.afterEvent = AFTEREVENT.NONE
+			self.session.nav.RecordTimer.removeEntry(timer)
+			self["key_green"].setText(_("Add timer"))
+			self.key_green_choice = self.ADD_TIMER
 
 	def disableTimer(self, timer, state, repeat=False, record=False):
 		if repeat:
@@ -1218,10 +1248,13 @@ class GraphMultiEPG(Screen, HelpableScreen):
 				menu = [(_("Disable current event but not coming events"), "nextonlystop"),(_("Disable timer"), "simplestop")]
 			self.session.openWithCallback(boundFunction(self.runningEventCallback, timer, state), ChoiceBox, title=title_text, list=menu)
 		elif timer.state == state:
-			timer.disable()
-			self.session.nav.RecordTimer.timeChanged(timer)
-			self["key_green"].setText(_("Add timer"))
-			self.key_green_choice = self.ADD_TIMER
+			if timer.external:
+				self.fallbackTimer.toggleTimer(timer, self.onSelectionChanged)
+			else:
+				timer.disable()
+				self.session.nav.RecordTimer.timeChanged(timer)
+				self["key_green"].setText(_("Add timer"))
+				self.key_green_choice = self.ADD_TIMER
 
 	def runningEventCallback(self, t, state, result):
 		if result is not None and t.state == state:
@@ -1260,7 +1293,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		begin = event.getBeginTime()
 		end = begin + event.getDuration()
 		refstr = ':'.join(serviceref.ref.toString().split(':')[:11])
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end):
 				isRecordEvent = True
@@ -1308,60 +1341,79 @@ class GraphMultiEPG(Screen, HelpableScreen):
 	def finishedEdit(self, answer=None):
 		if answer[0]:
 			entry = answer[1]
-			simulTimerList = self.session.nav.RecordTimer.record(entry)
-			if simulTimerList is not None:
-				for x in simulTimerList:
-					if x.setAutoincreaseEnd(entry):
-						self.session.nav.RecordTimer.timeChanged(x)
+			if entry.external_prev != entry.external:
+				def removeEditTimer():
+					entry.service_ref, entry.begin, entry.end, entry.external = entry.service_ref_prev, entry.begin_prev, entry.end_prev, entry.external_prev
+					self.removeTimer(entry)
+				def moveEditTimerError():
+					entry.external = entry.external_prev
+					self.onSelectionChanged()
+				if entry.external:
+					self.fallbackTimer.addTimer(entry, removeEditTimer, moveEditTimerError)
+				else:
+					newentry = createRecordTimerEntry(entry)
+					entry.service_ref, entry.begin, entry.end = entry.service_ref_prev, entry.begin_prev, entry.end_prev
+					self.fallbackTimer.removeTimer(entry, boundFunction(self.finishedTimerAdd, (True, newentry)), moveEditTimerError)
+			elif entry.external:
+				self.fallbackTimer.editTimer(entry, self.onSelectionChanged)
+			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
-					self.session.openWithCallback(self.finishedEdit, TimerSanityConflict, simulTimerList)
-					return
-				else:
-					self.session.nav.RecordTimer.timeChanged(entry)
-		self.onSelectionChanged()
+					for x in simulTimerList:
+						if x.setAutoincreaseEnd(entry):
+							self.session.nav.RecordTimer.timeChanged(x)
+					simulTimerList = self.session.nav.RecordTimer.record(entry)
+					if simulTimerList is not None:
+						self.session.openWithCallback(boundFunction(self.finishedEdit, service_ref, begin, end), TimerSanityConflict, simulTimerList)
+						return
+					else:
+						self.session.nav.RecordTimer.timeChanged(entry)
+				self.onSelectionChanged()
 
 	def finishedTimerAdd(self, answer):
 		print "finished add"
 		if answer[0]:
 			entry = answer[1]
-			simulTimerList = self.session.nav.RecordTimer.record(entry)
-			if simulTimerList is not None:
-				for x in simulTimerList:
-					if x.setAutoincreaseEnd(entry):
-						self.session.nav.RecordTimer.timeChanged(x)
+			if entry.external:
+				self.fallbackTimer.addTimer(entry, self.onSelectionChanged)
+			else:
 				simulTimerList = self.session.nav.RecordTimer.record(entry)
 				if simulTimerList is not None:
-					if not entry.repeated and not config.recording.margin_before.value and not config.recording.margin_after.value and len(simulTimerList) > 1:
-						change_time = False
-						conflict_begin = simulTimerList[1].begin
-						conflict_end = simulTimerList[1].end
-						if conflict_begin == entry.end:
-							entry.end -= 30
-							change_time = True
-						elif entry.begin == conflict_end:
-							entry.begin += 30
-							change_time = True
-						elif entry.begin == conflict_begin and (entry.service_ref and entry.service_ref.ref and entry.service_ref.ref.flags & eServiceReference.isGroup):
-							entry.begin += 30
-							change_time = True
-						if change_time:
-							simulTimerList = self.session.nav.RecordTimer.record(entry)
+					for x in simulTimerList:
+						if x.setAutoincreaseEnd(entry):
+							self.session.nav.RecordTimer.timeChanged(x)
+					simulTimerList = self.session.nav.RecordTimer.record(entry)
 					if simulTimerList is not None:
-						self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
-						return
-			cur = self["list"].getCurrent()
-			event = cur and cur[0]
-			if event:
-				begin = event.getBeginTime()
-				end = begin + event.getDuration()
-				if begin < entry.begin <= end or entry.begin <= begin <= entry.end:
-					self["key_green"].setText(_("Change timer"))
-					self.key_green_choice = self.REMOVE_TIMER
-		else:
-			self["key_green"].setText(_("Add timer"))
-			self.key_green_choice = self.ADD_TIMER
-			print "Timeredit aborted"
+						if not entry.repeated and not config.recording.margin_before.value and not config.recording.margin_after.value and len(simulTimerList) > 1:
+							change_time = False
+							conflict_begin = simulTimerList[1].begin
+							conflict_end = simulTimerList[1].end
+							if conflict_begin == entry.end:
+								entry.end -= 30
+								change_time = True
+							elif entry.begin == conflict_end:
+								entry.begin += 30
+								change_time = True
+							elif entry.begin == conflict_begin and (entry.service_ref and entry.service_ref.ref and entry.service_ref.ref.flags & eServiceReference.isGroup):
+								entry.begin += 30
+								change_time = True
+							if change_time:
+								simulTimerList = self.session.nav.RecordTimer.record(entry)
+						if simulTimerList is not None:
+							self.session.openWithCallback(self.finishSanityCorrection, TimerSanityConflict, simulTimerList)
+							return
+				cur = self["list"].getCurrent()
+				event = cur and cur[0]
+				if event:
+					begin = event.getBeginTime()
+					end = begin + event.getDuration()
+					if begin < entry.begin <= end or entry.begin <= begin <= entry.end:
+						self["key_green"].setText(_("Change timer"))
+						self.key_green_choice = self.REMOVE_TIMER
+				else:
+					self["key_green"].setText(_("Add timer"))
+					self.key_green_choice = self.ADD_TIMER
+					print "Timeredit aborted"
 
 	def finishSanityCorrection(self, answer):
 		self.finishedTimerAdd(answer)
@@ -1398,7 +1450,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		end = begin + event.getDuration()
 		refstr = ':'.join(servicerefref.toString().split(':')[:11])
 		isRecordEvent = False
-		for timer in self.session.nav.RecordTimer.timer_list:
+		for timer in self.session.nav.RecordTimer.getAllTimersList():
 			needed_ref = ':'.join(timer.service_ref.ref.toString().split(':')[:11]) == refstr
 			if needed_ref and (timer.eit == eventid and (begin < timer.begin <= end or timer.begin <= begin <= timer.end) or timer.repeated and self.session.nav.RecordTimer.isInRepeatTimer(timer, event)):
 				isRecordEvent = True
@@ -1409,6 +1461,7 @@ class GraphMultiEPG(Screen, HelpableScreen):
 		elif not isRecordEvent and self.key_green_choice != self.ADD_TIMER:
 			self["key_green"].setText(_("Add timer"))
 			self.key_green_choice = self.ADD_TIMER
+		self["list"].l.invalidate()
 
 	def moveTimeLines(self, force=False):
 		self.updateTimelineTimer.start((60 - (int(time()) % 60)) * 1000)	#keep syncronised

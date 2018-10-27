@@ -41,12 +41,14 @@ is usually caused by not marking PSignals as immutable.
 #include <lib/base/eenv.h>
 #include <lib/base/eerror.h>
 #include <lib/base/message.h>
+#include <lib/base/e2avahi.h>
 #include <lib/driver/rc.h>
 #include <lib/driver/rcinput_swig.h>
 #include <lib/service/event.h>
 #include <lib/service/iservice.h>
 #include <lib/service/service.h>
 #include <lib/service/servicedvb.h>
+#include <lib/service/servicepeer.h>
 #include <lib/gdi/fb.h>
 #include <lib/gdi/font.h>
 #include <lib/gdi/gpixmap.h>
@@ -67,6 +69,7 @@ is usually caused by not marking PSignals as immutable.
 #include <lib/gui/ewidgetanimation.h>
 #include <lib/gui/eslider.h>
 #include <lib/gui/epositiongauge.h>
+#include <lib/gui/egauge.h>
 #include <lib/gui/evideo.h>
 #include <lib/gui/ecanvas.h>
 #include <lib/python/connections.h>
@@ -119,7 +122,7 @@ is usually caused by not marking PSignals as immutable.
 %define %typemap_output_simple(Type)
  %typemap(in,numinputs=0) Type *OUTPUT ($*1_ltype temp),
               Type &OUTPUT ($*1_ltype temp)
-   "$1 = new Type;";
+   "$1 = new Type; (void)temp;";
  %fragment("t_out_helper"{Type},"header",
      fragment="t_output_helper") {}
  %typemap(argout,fragment="t_out_helper"{Type}) Type *OUTPUT, Type &OUTPUT
@@ -129,7 +132,7 @@ is usually caused by not marking PSignals as immutable.
 %define %typemap_output_ptr(Type)
  %typemap(in,numinputs=0) Type *OUTPUT ($*1_ltype temp),
               Type &OUTPUT ($*1_ltype temp)
-   "$1 = new Type;";
+   "$1 = new Type; (void)temp;";
  %fragment("t_out_helper"{Type},"header",
      fragment="t_output_helper") {}
  %typemap(argout,fragment="t_out_helper"{Type}) Type *OUTPUT, Type &OUTPUT
@@ -158,6 +161,8 @@ typedef long time_t;
 %include <lib/service/event.h>
 %include <lib/service/iservice.h>
 %include <lib/service/service.h>
+%include <lib/base/e2avahi.h>
+%include <lib/service/servicepeer.h>
 
 // TODO: embed these...
 %immutable ePicLoad::PictureData;
@@ -209,6 +214,7 @@ typedef long time_t;
 %include <lib/gui/ewindow.h>
 %include <lib/gui/eslider.h>
 %include <lib/gui/epositiongauge.h>
+%include <lib/gui/egauge.h>
 %include <lib/gui/ewidgetdesktop.h>
 %include <lib/gui/elistbox.h>
 %include <lib/gui/elistboxcontent.h>
@@ -427,8 +433,9 @@ extern int getPrevAsciiCode();
 extern void addFont(const char *filename, const char *alias, int scale_factor, int is_replacement, int renderflags = 0);
 extern const char *getEnigmaVersionString();
 extern const char *getBoxType();
-extern const char *getGStreamerVersionString();
 extern void dump_malloc_stats(void);
+extern void pauseInit(void);
+extern void resumeInit(void);
 %}
 
 extern void addFont(const char *filename, const char *alias, int scale_factor, int is_replacement, int renderflags = 0);
@@ -438,8 +445,9 @@ extern void quitMainloop(int exit_code);
 extern eApplication *getApplication();
 extern const char *getEnigmaVersionString();
 extern const char *getBoxType();
-extern const char *getGStreamerVersionString();
 extern void dump_malloc_stats(void);
+extern void pauseInit(void);
+extern void resumeInit(void);
 
 %include <lib/python/python_console.i>
 %include <lib/python/python_base.i>

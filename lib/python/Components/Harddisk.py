@@ -1,7 +1,6 @@
 import os
 import time
 from Tools.CList import CList
-from Tools.HardwareInfo import HardwareInfo
 from SystemInfo import SystemInfo
 from Components.Console import Console
 import Task
@@ -24,6 +23,9 @@ def getProcMounts():
 		item[1] = item[1].replace('\\040', ' ')
 	return result
 
+def getNonNetworkMediaMounts():
+	return [x[1] for x in getProcMounts() if x[1].startswith("/media/") and not x[0].startswith("//")]
+
 def isFileSystemSupported(filesystem):
 	try:
 		for fs in open('/proc/filesystems', 'r'):
@@ -40,7 +42,6 @@ def findMountPoint(path):
 		path = os.path.dirname(path)
 	return path
 
-
 DEVTYPE_UDEV = 0
 DEVTYPE_DEVFS = 1
 
@@ -54,6 +55,7 @@ class Harddisk:
 			self.type = DEVTYPE_DEVFS
 		else:
 			print "[Harddisk] Unable to determine structure of /dev"
+			self.type = -1
 			self.card = False
 
 		self.max_idle_time = 0
@@ -70,7 +72,7 @@ class Harddisk:
 		self.phys_path = os.path.realpath(self.sysfsPath('device'))
 
 		self.removable = removable
-		self.internal = "pci" in self.phys_path or "ahci" in self.phys_path
+		self.internal = "pci" in self.phys_path or "ahci" in self.phys_path or "sata" in self.phys_path
 		try:
 			data = open("/sys/block/%s/queue/rotational" % device, "r").read().strip()
 			self.rotational = int(data)
@@ -163,8 +165,8 @@ class Harddisk:
 		if cap == 0:
 			return ""
 		if cap < 1000:
-			return "%03d MB" % cap
-		return "%d.%03d GB" % (cap/1000, cap%1000)
+			return _("%03d MB") % cap
+		return _("%d.%03d GB") % (cap/1000, cap%1000)
 
 	def model(self):
 		try:
@@ -185,8 +187,11 @@ class Harddisk:
 	def free(self):
 		dev = self.findMount()
 		if dev:
-			stat = os.statvfs(dev)
-			return (stat.f_bfree/1000) * (stat.f_bsize/1024)
+			try:
+				stat = os.statvfs(dev)
+				return (stat.f_bfree/1000) * (stat.f_bsize/1024)
+			except:
+				pass
 		return -1
 
 	def numPartitions(self):
@@ -369,7 +374,7 @@ class Harddisk:
 			if size > 20000:
 				try:
 					version = map(int, open("/proc/version","r").read().split(' ', 4)[2].split('.',2)[:2])
-					if (version[0] > 3) or ((version[0] > 2) and (version[1] >= 2)):
+					if (version[0] > 3) or (version[0] > 2 and version[1] >= 2):
 						# Linux version 3.2 supports bigalloc and -C option, use 256k blocks
 						task.args += ["-C", "262144"]
 						big_o_options.append("bigalloc")
@@ -420,42 +425,6 @@ class Harddisk:
 		task.setTool('fsck.ext3')
 		task.args.append('-f')
 		task.args.append('-p')
-		task.args.append(dev)
-		MountTask(job, self)
-		task = Task.ConditionTask(job, _("Waiting for mount"))
-		task.check = self.mountDevice
-		return job
-
-	def createExt4ConversionJob(self):
-		if not isFileSystemSupported('ext4'):
-			raise Exception, _("You system does not support ext4")
-		job = Task.Job(_("Converting ext3 to ext4..."))
-		if not os.path.exists('/sbin/tune2fs'):
-			addInstallTask(job, 'e2fsprogs-tune2fs')
-		if self.findMount():
-			# Create unmount task if it was not mounted
-			UnmountTask(job, self)
-			dev = self.mount_device
-		else:
-			# otherwise, assume there is one partition
-			dev = self.partitionPath("1")
-		task = Task.LoggingTask(job, "fsck")
-		task.setTool('fsck.ext3')
-		task.args.append('-p')
-		task.args.append(dev)
-		task = Task.LoggingTask(job, "tune2fs")
-		task.setTool('tune2fs')
-		task.args.append('-O')
-		task.args.append('extents,uninit_bg,dir_index')
-		task.args.append('-o')
-		task.args.append('journal_data_writeback')
-		task.args.append(dev)
-		task = Task.LoggingTask(job, "fsck")
-		task.setTool('fsck.ext4')
-		task.postconditions = [] # ignore result, it will always "fail"
-		task.args.append('-f')
-		task.args.append('-p')
-		task.args.append('-D')
 		task.args.append(dev)
 		MountTask(job, self)
 		task = Task.ConditionTask(job, _("Waiting for mount"))
@@ -594,29 +563,6 @@ class Partition:
 						return fields[2]
 		return ''
 
-DEVICEDB =  \
-	{"dm8000":
-		{
-			# dm8000:
-			"/devices/platform/brcm-ehci.0/usb1/1-1/1-1.1/1-1.1:1.0": "Front USB Slot",
-			"/devices/platform/brcm-ehci.0/usb1/1-1/1-1.2/1-1.2:1.0": "Back, upper USB Slot",
-			"/devices/platform/brcm-ehci.0/usb1/1-1/1-1.3/1-1.3:1.0": "Back, lower USB Slot",
-			"/devices/platform/brcm-ehci-1.1/usb2/2-1/2-1:1.0/host1/target1:0:0/1:0:0:0": "DVD Drive",
-		},
-	"dm800":
-	{
-		# dm800:
-		"/devices/platform/brcm-ehci.0/usb1/1-2/1-2:1.0": "Upper USB Slot",
-		"/devices/platform/brcm-ehci.0/usb1/1-1/1-1:1.0": "Lower USB Slot",
-	},
-	"dm7025":
-	{
-		# dm7025:
-		"/devices/pci0000:00/0000:00:14.1/ide1/1.0": "CF Card Slot", #hdc
-		"/devices/pci0000:00/0000:00:14.1/ide0/0.0": "Internal Harddisk"
-	}
-	}
-
 def addInstallTask(job, package):
 	task = Task.LoggingTask(job, "update packages")
 	task.setTool('opkg')
@@ -667,12 +613,7 @@ class HarddiskManager:
 				dev = int(readFile(devpath + "/dev").split(':')[0])
 			else:
 				dev = None
-			if HardwareInfo().get_device_model().startswith('vusolo4k'):
-				devlist = [1, 7, 31, 253, 254, 179] # ram, loop, mtdblock, romblock, ramzswap, mmc
-			else:
-				devlist = [1, 7, 31, 253, 254] # ram, loop, mtdblock, romblock, ramzswap
-			if dev in devlist:
-				blacklisted = True
+			blacklisted = dev in [1, 7, 31, 253, 254] + (SystemInfo["HasMMC"] and [179] or []) #ram, loop, mtdblock, romblock, ramzswap, mmc
 			if blockdev[0:2] == 'sr':
 				is_cdrom = True
 			if blockdev[0:2] == 'hd':
@@ -830,10 +771,6 @@ class HarddiskManager:
 			description = readFile("/sys" + phys + "/model")
 		except IOError, s:
 			print "couldn't read model: ", s
-		from Tools.HardwareInfo import HardwareInfo
-		for physdevprefix, pdescription in DEVICEDB.get(HardwareInfo().device_name,{}).items():
-			if phys.startswith(physdevprefix):
-				description = pdescription
 		# not wholedisk and not partition 1
 		if part and part != 1:
 			description += _(" (Partition %d)") % part

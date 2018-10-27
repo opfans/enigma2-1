@@ -54,6 +54,8 @@ dist_install_DATA = \
 	lock.png \
 	lockBouquet.png \
 	loop.png \
+	menu_off.png \
+	menu_on.png \
 	marker.png \
 	mp_buttons.png \
 	movie_play.png \
@@ -72,6 +74,11 @@ dist_install_DATA = \
 	playlist.png \
 	playlistquit.png \
 	plilogo-fs8.png \
+	pipclock_add.png \
+	pipclock.png \
+	pipclock_post.png \
+	pipclock_pre.png \
+	pipclock_prepost.png \
 	quit.png \
 	network_wired.png \
 	network_wired-active.png \

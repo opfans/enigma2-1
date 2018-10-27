@@ -1,7 +1,7 @@
 from config import ConfigNumber, ConfigYesNo, ConfigSubsection, ConfigSelection, config
 
 def InitRecordingConfig():
-	config.recording = ConfigSubsection();
+	config.recording = ConfigSubsection()
 	# actually this is "recordings always have priority". "Yes" does mean: don't ask. The RecordTimer will ask when value is 0.
 	config.recording.asktozap = ConfigYesNo(default=True)
 	config.recording.margin_before = ConfigNumber(default=3)
@@ -11,6 +11,7 @@ def InitRecordingConfig():
 	config.recording.keep_timers = ConfigNumber(default=7)
 	config.recording.filename_composition = ConfigSelection(default = "standard", choices = [
 		("standard", _("standard")),
+		("event", _("Event name first")),
 		("short", _("Short filenames")),
 		("long", _("Long filenames")) ] )
 	config.recording.always_ecm = ConfigYesNo(default = False)

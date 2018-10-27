@@ -1,10 +1,13 @@
-import sys, os
+import sys
+import os
 if os.path.isfile("/usr/lib/enigma2/python/enigma.zip"):
 	sys.path.append("/usr/lib/enigma2/python/enigma.zip")
 
 from Tools.Profile import profile, profile_final
 profile("PYTHON_START")
 
+# Don't remove this line. It may seem to do nothing, but if removed,
+# it will break output redirection for crash logs.
 import Tools.RedirectOutput
 import enigma
 import eConsoleImpl
@@ -14,11 +17,16 @@ enigma.eSocketNotifier = eBaseImpl.eSocketNotifier
 enigma.eConsoleAppContainer = eConsoleImpl.eConsoleAppContainer
 
 from traceback import print_exc
+
+profile("SetupDevices")
+import Components.SetupDevices
+Components.SetupDevices.InitSetupDevices()
+
 profile("SimpleSummary")
 from Screens import InfoBar
 from Screens.SimpleSummary import SimpleSummary
 
-from sys import stdout, exc_info
+from sys import stdout
 
 profile("Bouquets")
 from Components.config import config, configfile, ConfigText, ConfigYesNo, ConfigInteger, NoSave
@@ -57,6 +65,8 @@ config.misc.prev_wakeup_time_type = ConfigInteger(default=0)
 config.misc.epgcache_filename = ConfigText(default = "/hdd/epg.dat")
 
 def setEPGCachePath(configElement):
+	if os.path.isdir(configElement.value) or os.path.islink(configElement.value):
+		configElement.value = os.path.join(configElement.value, "epg.dat")
 	enigma.eEPGCache.getInstance().setCacheFile(configElement.value)
 
 #demo code for use of standby enter leave callbacks
@@ -112,7 +122,7 @@ def dump(dir, p = ""):
 			dump(val, p + "(dict)/" + entry)
 	if hasattr(dir, "__dict__"):
 		for name, value in dir.__dict__.items():
-			if not had.has_key(str(value)):
+			if str(value) not in had:
 				had[str(value)] = 1
 				dump(value, p + "/" + str(name))
 			else:
@@ -343,13 +353,20 @@ class PowerKey:
 		print "PowerOff - Now!"
 		if not Screens.Standby.inTryQuitMainloop and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND:
 			self.session.open(Screens.Standby.TryQuitMainloop, 1)
+		else:
+			return 0
 
 	def powerup(self):
-		self.doAction(config.misc.hotkey.power.value)
+		if not Screens.Standby.inStandby and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND and self.session.in_exec:
+			self.doAction(config.misc.hotkey.power.value)
+		else:
+			return 0
 
 	def powerlong(self):
-		if not(Screens.Standby.inTryQuitMainloop or (self.session.current_dialog and not self.session.current_dialog.ALLOW_SUSPEND)):
+		if not Screens.Standby.inStandby and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND and self.session.in_exec:
 			self.doAction(config.misc.hotkey.power_long.value)
+		else:
+			return 0
 
 	def doAction(self, selected):
 		if selected:
@@ -373,6 +390,8 @@ class PowerKey:
 	def standby(self):
 		if not Screens.Standby.inStandby and self.session.current_dialog and self.session.current_dialog.ALLOW_SUSPEND and self.session.in_exec:
 			self.session.open(Screens.Standby.Standby)
+		else:
+			return 0
 
 profile("Scart")
 from Screens.Scart import Scart
@@ -401,7 +420,6 @@ class AutoScartControl:
 				self.scartDialog.switchToTV()
 
 profile("Load:CI")
-from enigma import eDVBCIInterfaces
 from Screens.Ci import CiHandler
 
 profile("Load:VolumeControl")
@@ -412,7 +430,9 @@ def runScreenTest():
 	config.misc.startCounter.save()
 
 	profile("readPluginList")
+	enigma.pauseInit()
 	plugins.readPluginList(resolveFilename(SCOPE_PLUGINS))
+	enigma.resumeInit()
 
 	profile("Init:Session")
 	nav = Navigation()
@@ -431,12 +451,6 @@ def runScreenTest():
 
 	enigma.ePythonConfigQuery.setQueryFunc(configfile.getResolvedKey)
 	enigma.eDVBService.setQueryFunc(Components.ParentalControl.parentalControl.isServiceLocked)
-
-#	eDVBCIInterfaces.getInstance().setDescrambleRules(0 # Slot Number
-#		,(	["1:0:1:24:4:85:C00000:0:0:0:"], #service_list
-#			["PREMIERE"], #provider_list,
-#			[] #caid_list
-#		));
 
 	def runNextScreen(session, screensToRun, *result):
 		if result:
@@ -473,7 +487,7 @@ def runScreenTest():
 
 	profile("wakeup")
 	from time import time, strftime, localtime
-	from Tools.StbHardware import setFPWakeuptime, getFPWakeuptime, setRTCtime
+	from Tools.StbHardware import setFPWakeuptime, setRTCtime
 	from Screens.SleepTimerEdit import isNextWakeupTime
 	#get currentTime
 	nowTime = time()
@@ -524,10 +538,6 @@ profile("InputDevice")
 import Components.InputDevice
 Components.InputDevice.InitInputDevices()
 import Components.InputHotplug
-
-profile("SetupDevices")
-import Components.SetupDevices
-Components.SetupDevices.InitSetupDevices()
 
 profile("AVSwitch")
 import Components.AVSwitch

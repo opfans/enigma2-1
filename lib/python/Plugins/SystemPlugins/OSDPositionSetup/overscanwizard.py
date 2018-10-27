@@ -1,5 +1,4 @@
 from Screens.Screen import Screen
-from Screens.Standby import QuitMainloopScreen
 from Components.ConfigList import ConfigListScreen
 from Components.config import config, ConfigSlider, getConfigListEntry, ConfigYesNo
 from Components.Label import Label
@@ -11,19 +10,19 @@ class OverscanWizard(Screen, ConfigListScreen):
 	def __init__(self, session, timeOut=True):
 		if getDesktop(0).size().height() == 1080:
 			self.skin = """<screen position="fill" flags="wfNoBorder">
-				<ePixmap pixmap="skin_default/overscan1920x1080.png" position="0,0" size="1920,1080" zPosition="-2" alphatest="on" />
-				<eLabel position="378,180" size="1244,686" zPosition="-1"/>
-				<widget name="title" position="383,185" size="1234,50" font="Regular;40" foregroundColor="blue"/>
-				<widget name="introduction" position="383,235" size="1234,623" halign="center" valign="center" font="Regular;30"/>
-				<widget name="config" position="383,635" size="1234,226" font="Regular;30" itemHeight="40"/>
+				<ePixmap pixmap="skin_default/overscan1920x1080.png" position="0,0" size="1920,1080" zPosition="3" alphatest="on"/>
+				<eLabel position="378,180" size="1244,686" zPosition="3"/>
+				<widget name="title" position="383,185" size="1234,50" font="Regular;40" foregroundColor="blue" zPosition="4"/>
+				<widget name="introduction" position="383,235" size="1234,623" halign="center" valign="center" font="Regular;30" zPosition="4"/>
+				<widget name="config" position="383,635" size="1234,226" font="Regular;30" itemHeight="40" zPosition="4"/>
 			</screen>"""
 		else:
-			self.skin = """<screen position="fill">
-				<ePixmap pixmap="skin_default/overscan1280x720.png" position="0,0" size="1280,720" zPosition="-2" alphatest="on" />
-				<eLabel position="223,120" size="810,475" zPosition="-1"/>
-				<widget name="title" position="228,125" size="800,40" font="Regular;30" foregroundColor="blue"/>
-				<widget name="introduction" position="228,165" size="800,623" halign="center" valign="center" font="Regular;20"/>
-				<widget name="config" position="228,590" size="800,120" font="Regular;20" itemHeight="30"/>
+			self.skin = """<screen position="fill"  flags="wfNoBorder">
+				<ePixmap pixmap="skin_default/overscan1280x720.png" position="0,0" size="1280,720" zPosition="3" alphatest="on"/>
+				<eLabel position="223,120" size="810,475" zPosition="3"/>
+				<widget name="title" position="228,125" size="800,40" font="Regular;30" foregroundColor="blue" zPosition="4"/>
+				<widget name="introduction" position="228,165" size="800,623" halign="center" valign="center" font="Regular;20" zPosition="4"/>
+				<widget name="config" position="228,590" size="800,120" font="Regular;20" itemHeight="30" zPosition="4"/>
 			</screen>"""
 
 		Screen.__init__(self, session)
@@ -78,19 +77,19 @@ class OverscanWizard(Screen, ConfigListScreen):
 				"This means you are always watching a \"zoomed in\" picture instead of real HD, and parts of the user inferface (skin) may be invisible.\n\n"
 				"The yellow area means a 5% border area of a full HD picture will be invisible.\n"
 				"The green area means a 10% border area of a full HD picture will be invisible.\n\n"
-				"In other words, if the yellow box meets all for sides of your screen, then you have at least 5% overscan on all sides.\n\n"
+				"In other words, if the yellow box touches all four sides of your screen, you have at least 5% overscan on all sides.\n\n"
 				"If you see the tips of all eight arrowheads, then your TV has overscan disabled.\n\n"
 				"Test Pattern by TigerDave - www.tigerdave.com/ht_menu.htm"))
-			self.yes_no = ConfigYesNo(default = True)
+			self.yes_no = ConfigYesNo(default = True, graphic = False)
 			self.list.append(getConfigListEntry(_("Did you see all eight arrow heads?"), self.yes_no))
 			self.save_new_position = False
 			setPosition(0, 720, 0, 576)
 		elif self.step == 2:
 			self.Timer.stop()
 			self["title"].setText(_("Overscan wizard"))
-			self["introduction"].setText(_("It seems you did not see all the eight arrow heads. This means your TV is "
+			self["introduction"].setText(_("It seems you did not see all the eight arrow heads. This means your TV "
 				"has overscan enabled, and is not configured properly.\n\n"
-				"Please refer to your TVs manual to find how you can disable overscan on your TV. Look for terms like 'Just fit', 'Full width', etc. "
+				"Please refer to your TV's manual to find how you can disable overscan on your TV. Look for terms like 'Just fit', 'Full width', etc. "
 				"If you can't find it, ask other users at http://forums.openpli.org.\n\n"))
 			self.list.append(getConfigListEntry(_("Did you see all eight arrow heads?"), self.yes_no))
 			self.yes_no.value = True
@@ -98,7 +97,7 @@ class OverscanWizard(Screen, ConfigListScreen):
 			setPosition(0, 720, 0, 576)
 		elif self.step == 3:
 			self["introduction"].setText(_("You did not see all eight arrow heads. This means your TV has overscan enabled "
-				"and presents you with a zoomed-in picture, causing you to loose part of a full HD screen. In addition this "
+				"and presents you with a zoomed-in picture, causing you to loose part of a full HD screen. In addition to this "
 				"you may also miss parts of the user interface, for example volume bars and more.\n\n"
 				"You can now try to resize and change the position of the user interface until you see the eight arrow heads.\n\n"
 				"When done press OK.\n\n"))
@@ -125,7 +124,7 @@ class OverscanWizard(Screen, ConfigListScreen):
 			self.Timer.stop()
 			self["title"].setText(_("Overscan wizard"))
 			self["introduction"].setText(_("The overscan wizard has been completed.\n\n"
-				"Note: you can always start the Overscan wizard later,  via\n\nmenu->installation->system->Overscan wizard"))
+				"Note: you can always start the Overscan wizard later,  via\n\nMenu->Installation->System->Audio/Video->Overscan wizard"))
 			self.yes_no.value = True
 			self.list.append(getConfigListEntry(_("Do you want to quit the overscan wizard?"), self.yes_no))
 		elif self.step == 6:

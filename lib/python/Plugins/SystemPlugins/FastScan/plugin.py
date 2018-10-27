@@ -20,6 +20,7 @@ config.misc.fastscan = ConfigSubsection()
 config.misc.fastscan.last_configuration = ConfigText(default="()")
 config.misc.fastscan.auto = ConfigSelection(default="true", choices=[("true", _("yes")), ("false", _("no")), ("multi", _("multi"))])
 config.misc.fastscan.autoproviders = ConfigText(default="()")
+config.misc.fastscan.drop = ConfigYesNo(default = True)
 
 class FastScanStatus(Screen):
 	skin = """
@@ -29,7 +30,7 @@ class FastScanStatus(Screen):
 		<widget name="scan_progress" position="10,155" size="400,15" pixmap="skin_default/progress_big.png" borderWidth="2" borderColor="#cccccc" />
 	</screen>"""
 
-	def __init__(self, session, scanTuner=0, transponderParameters=None, scanPid=900, keepNumbers=False, keepSettings=False, providerName='Favorites'):
+	def __init__(self, session, scanTuner=0, transponderParameters=None, scanPid=900, keepNumbers=False, keepSettings=False, providerName='Favorites', createRadioBouquet=False):
 		Screen.__init__(self, session)
 		self.setTitle(_("Fast Scan"))
 		self.scanPid = scanPid
@@ -38,6 +39,7 @@ class FastScanStatus(Screen):
 		self.keepNumbers = keepNumbers
 		self.keepSettings = keepSettings
 		self.providerName = providerName
+		self.createRadioBouquet = createRadioBouquet
 		self.isDone = False
 
 		self.onClose.append(self.__onClose)
@@ -46,11 +48,11 @@ class FastScanStatus(Screen):
 		self["scan_progress"] = ProgressBar()
 		self["scan_state"] = Label(_("scan state"))
 
-		if self.session.pipshown:
+		if hasattr(self.session, "pipshown") and self.session.pipshown:
 			from Screens.InfoBar import InfoBar
 			InfoBar.instance and hasattr(InfoBar.instance, "showPiP") and InfoBar.instance.showPiP()
 
-		self.prevservice = self.session.nav.getCurrentlyPlayingServiceReference()
+		self.prevservice = self.session.nav.getCurrentlyPlayingServiceOrGroup()
 		self.session.nav.stopService()
 
 		self["actions"] = ActionMap(["OkCancelActions"],
@@ -69,7 +71,7 @@ class FastScanStatus(Screen):
 	def doServiceScan(self):
 		self["scan_state"].setText(_('Scanning %s...') % (self.providerName))
 		self["scan_progress"].setValue(0)
-		self.scan = eFastScan(self.scanPid, self.providerName, self.transponderParameters, self.keepNumbers, self.keepSettings)
+		self.scan = eFastScan(self.scanPid, self.providerName, self.transponderParameters, self.keepNumbers, self.keepSettings, self.createRadioBouquet)
 		self.scan.scanCompleted.get().append(self.scanCompleted)
 		self.scan.scanProgress.get().append(self.scanProgress)
 		fstfile = None
@@ -124,14 +126,13 @@ class FastScanScreen(ConfigListScreen, Screen):
 		('TV Vlaanderen', (1, 910, True)),
 		('TéléSAT', (0, 920, True)),
 		('HD Austria', (0, 950, False)),
-		('Fast Scan Deutschland', (0, 960, False)),
+		('Diveo', (0, 960, False)),
 		('Skylink Czech Republic', (1, 30, False)),
 		('Skylink Slovak Republic', (1, 31, False)),
-		('AustriaSat Magyarország Eutelsat 9E', (2, 951, False)),
-		('AustriaSat Magyarország Astra 3', (1, 951, False)),
+		('KabelKiosk', (0, 970, False)),
 		('TéléSAT Astra3', (1, 920, True)),
 		('HD Austria Astra3', (1, 950, False)),
-		('Fast Scan Deutschland Astra3', (1, 960, False)),
+		('Diveo Astra3', (1, 960, False)),
 		('Canal Digitaal Astra 1', (0, 900, True)),
 		('TV Vlaanderen  Astra 1', (0, 910, True))]
 
@@ -142,11 +143,7 @@ class FastScanScreen(ConfigListScreen, Screen):
 		(12070000, 27500000, eDVBFrontendParametersSatellite.FEC_3_4, 235,
 		eDVBFrontendParametersSatellite.Polarisation_Horizontal, eDVBFrontendParametersSatellite.Inversion_Unknown,
 		eDVBFrontendParametersSatellite.System_DVB_S, eDVBFrontendParametersSatellite.Modulation_QPSK,
-		eDVBFrontendParametersSatellite.RollOff_alpha_0_35, eDVBFrontendParametersSatellite.Pilot_Off),
-		(12074000, 27500000, eDVBFrontendParametersSatellite.FEC_3_4, 90,
-		eDVBFrontendParametersSatellite.Polarisation_Vertical, eDVBFrontendParametersSatellite.Inversion_Unknown,
-		eDVBFrontendParametersSatellite.System_DVB_S2, eDVBFrontendParametersSatellite.Modulation_8PSK,
-		eDVBFrontendParametersSatellite.RollOff_alpha_0_35, eDVBFrontendParametersSatellite.Pilot_On))
+		eDVBFrontendParametersSatellite.RollOff_alpha_0_35, eDVBFrontendParametersSatellite.Pilot_Off))
 
 	def __init__(self, session, nimList):
 		Screen.__init__(self, session)
@@ -162,16 +159,21 @@ class FastScanScreen(ConfigListScreen, Screen):
 		}, -2)
 
 		providerList = list(x[0] for x in self.providers)
-
 		lastConfiguration = eval(config.misc.fastscan.last_configuration.value)
-		if not lastConfiguration or not tuple(x for x in self.providers if x[0] == lastConfiguration[1]):
-			lastConfiguration = (nimList[0][0], providerList[0], True, True, False)
-
-		self.scan_nims = ConfigSelection(default = lastConfiguration[0], choices = nimList)
-		self.scan_provider = ConfigSelection(default = lastConfiguration[1], choices = providerList)
-		self.scan_hd = ConfigYesNo(default = lastConfiguration[2])
-		self.scan_keepnumbering = ConfigYesNo(default = lastConfiguration[3])
-		self.scan_keepsettings = ConfigYesNo(default = lastConfiguration[4])
+		if not lastConfiguration or not lastConfiguration[1] in [x[0] for x in self.providers]:
+			self.scan_provider = ConfigSelection(default=None, choices=[(None, _("None"))] + providerList)
+			self.scan_nims = ConfigSelection(default=nimList[0][0], choices=nimList)
+			self.scan_hd = ConfigYesNo(default=True)
+			self.scan_keepnumbering = ConfigYesNo(default=True)
+			self.scan_keepsettings = ConfigYesNo(default=False)
+			self.scan_create_radio_bouquet = ConfigYesNo(default=False)
+		else:
+			self.scan_provider = ConfigSelection(default=lastConfiguration[1], choices=[(None, _("None"))] + providerList)
+			self.scan_nims = ConfigSelection(default=lastConfiguration[0] if lastConfiguration[0] in [x[0] for x in nimList] else nimList[0][0], choices=nimList)
+			self.scan_hd = ConfigYesNo(default=lastConfiguration[2])
+			self.scan_keepnumbering = ConfigYesNo(default=lastConfiguration[3])
+			self.scan_keepsettings = ConfigYesNo(default=lastConfiguration[4])
+			self.scan_create_radio_bouquet = ConfigYesNo(default=len(lastConfiguration) > 5 and lastConfiguration[5])
 		self.tunerEntry = getConfigListEntry(_("Tuner"), self.scan_nims)
 		self.scanProvider = getConfigListEntry(_("Provider"), self.scan_provider)
 		self.scanHD = getConfigListEntry(_("HD list"), self.scan_hd)
@@ -184,18 +186,23 @@ class FastScanScreen(ConfigListScreen, Screen):
 		self.createSetup()
 		self.finished_cb = None
 		self["introduction"] = Label(_("Select your provider, and press OK to start the scan"))
+		self["key_red"] = Label(_("Cancel"))
+		self["key_green"] = Label(_("Save"))
 
 	def createSetup(self):
 		self.list = []
-		self.list.append(self.tunerEntry)
 		self.list.append(self.scanProvider)
-		self.list.append(self.scanHD)
-		self.list.append(getConfigListEntry(_("Use fastscan channel numbering"), self.scan_keepnumbering))
-		self.list.append(getConfigListEntry(_("Use fastscan channel names"), self.scan_keepsettings))
-		self.list.append(getConfigListEntry(_("Enable auto fast scan"), config.misc.fastscan.auto))
-		if config.misc.fastscan.auto.value == "multi":
-			for provider in self.providers:
-				self.list.append(getConfigListEntry(_("Enable auto fast scan for %s") % provider[0], self.config_autoproviders[provider[0]]))
+		if self.scan_provider.value:
+			self.list.append(self.tunerEntry)
+			self.list.append(self.scanHD)
+			self.list.append(getConfigListEntry(_("Use fastscan channel numbering"), self.scan_keepnumbering))
+			self.list.append(getConfigListEntry(_("Use fastscan channel names"), self.scan_keepsettings))
+			self.list.append(getConfigListEntry(_("Create separate radio userbouquet"), self.scan_create_radio_bouquet))
+			self.list.append(getConfigListEntry(_("Drop unconfigured satellites"), config.misc.fastscan.drop))
+			self.list.append(getConfigListEntry(_("Enable auto fast scan"), config.misc.fastscan.auto))
+			if config.misc.fastscan.auto.value == "multi":
+				for provider in self.providers:
+					self.list.append(getConfigListEntry(_("Enable auto fast scan for %s") % provider[0], self.config_autoproviders[provider[0]]))
 		self["config"].list = self.list
 		self["config"].l.setList(self.list)
 
@@ -208,12 +215,15 @@ class FastScanScreen(ConfigListScreen, Screen):
 		self.createSetup()
 
 	def saveConfiguration(self):
-		config.misc.fastscan.last_configuration.value = `(self.scan_nims.value, self.scan_provider.value, self.scan_hd.value, self.scan_keepnumbering.value, self.scan_keepsettings.value)`
-		auto_providers = []
-		for provider in self.providers:
-			if self.config_autoproviders[provider[0]].value:
-				auto_providers.append(provider[0])
-		config.misc.fastscan.autoproviders.value = ",".join(auto_providers)
+		if self.scan_provider.value:
+			config.misc.fastscan.last_configuration.value = `(self.scan_nims.value, self.scan_provider.value, self.scan_hd.value, self.scan_keepnumbering.value, self.scan_keepsettings.value, self.scan_create_radio_bouquet.value)`
+			auto_providers = []
+			for provider in self.providers:
+				if self.config_autoproviders[provider[0]].value:
+					auto_providers.append(provider[0])
+			config.misc.fastscan.autoproviders.value = ",".join(auto_providers)
+		else:
+			config.misc.fastscan.last_configuration.value = "()"
 		config.misc.fastscan.save()
 
 	def keySave(self):
@@ -221,8 +231,9 @@ class FastScanScreen(ConfigListScreen, Screen):
 		self.close()
 
 	def keyGo(self):
-		self.saveConfiguration()
-		self.startScan()
+		if self.scan_provider.value:
+			self.saveConfiguration()
+			self.startScan()
 
 	def getTransponderParameters(self, number):
 		transponderParameters = eDVBFrontendParametersSatellite()
@@ -236,6 +247,9 @@ class FastScanScreen(ConfigListScreen, Screen):
 		transponderParameters.modulation = self.transponders[number][7]
 		transponderParameters.rolloff = self.transponders[number][8]
 		transponderParameters.pilot = self.transponders[number][9]
+		transponderParameters.is_id = eDVBFrontendParametersSatellite.No_Stream_Id_Filter
+		transponderParameters.pls_mode = eDVBFrontendParametersSatellite.PLS_Gold
+		transponderParameters.pls_code = 0
 		return transponderParameters
 
 	def startScan(self):
@@ -246,7 +260,7 @@ class FastScanScreen(ConfigListScreen, Screen):
 		if self.scan_nims.value:
 			self.session.open(FastScanStatus, scanTuner = int(self.scan_nims.value),
 				transponderParameters = self.getTransponderParameters(parameters[0]),
-				scanPid = pid, keepNumbers = self.scan_keepnumbering.value, keepSettings = self.scan_keepsettings.value,
+				scanPid = pid, keepNumbers = self.scan_keepnumbering.value, keepSettings = self.scan_keepsettings.value, createRadioBouquet = self.scan_create_radio_bouquet.value,
 				providerName = self.scan_provider.getText())
 
 	def keyCancel(self):
@@ -273,7 +287,7 @@ class FastScanAutoScreen(FastScanScreen):
 			pid = parameters[1]
 			if lastConfiguration[2] and parameters[2]:
 				pid += 1
-			self.scan = eFastScan(pid, lastConfiguration[1], self.getTransponderParameters(parameters[0]), lastConfiguration[3], lastConfiguration[4])
+			self.scan = eFastScan(pid, lastConfiguration[1], self.getTransponderParameters(parameters[0]), lastConfiguration[3], lastConfiguration[4], len(lastConfiguration) > 5 and lastConfiguration[5])
 			self.scan.scanCompleted.get().append(self.scanCompleted)
 			self.scan.start(int(lastConfiguration[0]))
 		else:
@@ -288,7 +302,7 @@ class FastScanAutoScreen(FastScanScreen):
 	def scanCompleted(self, result):
 		print "[AutoFastScan] completed result = ", result
 		refreshServiceList()
-		self.close(result>0)
+		self.close(result)
 
 	def Power(self):
 		from Screens.Standby import inStandby
@@ -329,13 +343,13 @@ def restartScanAutoStartTimer(reply=False):
 	if not reply:
 		print "[AutoFastScan] Scan was not succesfully retry in one hour"
 		FastScanAutoStartTimer.startLongTimer(3600)
-	else:
+	elif reply is not True:
 		global autoproviders
 		if autoproviders:
 			provider = autoproviders.pop(0)
 			if provider:
 				lastConfiguration = eval(config.misc.fastscan.last_configuration.value)
-				lastConfiguration = (lastConfiguration[0], provider, lastConfiguration[2], lastConfiguration[3], lastConfiguration[4])
+				lastConfiguration = (lastConfiguration[0], provider, lastConfiguration[2], lastConfiguration[3], lastConfiguration[4], len(lastConfiguration) > 5 and lastConfiguration[5])
 				Session.openWithCallback(restartScanAutoStartTimer, FastScanAutoScreen, lastConfiguration)
 				return
 		FastScanAutoStartTimer.startLongTimer(86400)
@@ -351,7 +365,7 @@ def FastScanAuto():
 			if autoproviders:
 				provider = autoproviders.pop(0)
 				if provider:
-					lastConfiguration = (lastConfiguration[0], provider, lastConfiguration[2], lastConfiguration[3], lastConfiguration[4])
+					lastConfiguration = (lastConfiguration[0], provider, lastConfiguration[2], lastConfiguration[3], lastConfiguration[4], len(lastConfiguration) > 5 and lastConfiguration[5])
 		Session.openWithCallback(restartScanAutoStartTimer, FastScanAutoScreen, lastConfiguration)
 
 FastScanAutoStartTimer.callback.append(FastScanAuto)
@@ -360,25 +374,29 @@ def leaveStandby():
 	FastScanAutoStartTimer.stop()
 
 def standbyCountChanged(value):
-	if config.misc.fastscan.auto.value != "false" and config.misc.fastscan.last_configuration.value:
+	if config.misc.fastscan.auto.value != "false" and eval(config.misc.fastscan.last_configuration.value):
 		from Screens.Standby import inStandby
 		inStandby.onClose.append(leaveStandby)
 		FastScanAutoStartTimer.startLongTimer(90)
 
-def startSession(session, **kwargs):
+def autostart(reason, **kwargs):
 	global Session
-	Session = session
-	config.misc.standbyCounter.addNotifier(standbyCountChanged, initial_call=False)
+	if reason == 0 and "session" in kwargs and not Session:
+		Session = kwargs["session"]
+		config.misc.standbyCounter.addNotifier(standbyCountChanged, initial_call=False)
+	elif reason == 1 and Session:
+		Session = None
+		config.misc.standbyCounter.removeNotifier(standbyCountChanged)
 
 def FastScanStart(menuid, **kwargs):
-	if menuid == "scan":
+	if menuid == "scan" and nimmanager.somethingConnected():
 		return [(_("Fast Scan"), FastScanMain, "fastscan", None)]
 	else:
 		return []
 
 def Plugins(**kwargs):
 	if (nimmanager.hasNimType("DVB-S")):
-		return [PluginDescriptor(name=_("Fast Scan"), description="Scan Dutch/Belgian sat provider", where = PluginDescriptor.WHERE_MENU, fnc=FastScanStart),
-			PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART], fnc=startSession)]
+		return [PluginDescriptor(name=_("Fast Scan"), description="Scan M7 Brands, BE/NL/DE/AT/CZ", where = PluginDescriptor.WHERE_MENU, fnc=FastScanStart),
+			PluginDescriptor(where=[PluginDescriptor.WHERE_SESSIONSTART, PluginDescriptor.WHERE_AUTOSTART], fnc=autostart)]
 	else:
 		return []

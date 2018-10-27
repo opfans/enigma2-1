@@ -20,6 +20,8 @@ class ChoiceBox(Screen):
 		self.skinName = skin_name + ["ChoiceBox"]
 
 		self.reorderConfig = reorderConfig
+		self["autoresize"] = Label("") # do not remove, used for autoResize()
+		self["description"] = Label()
 		self["text"] = Label(title)
 		self.list = []
 		self.summarylist = []
@@ -58,6 +60,7 @@ class ChoiceBox(Screen):
 				self.keymap[self.__keys[pos]] = list[pos]
 			self.summarylist.append((self.__keys[pos],x[0]))
 			pos += 1
+
 		self["list"] = ChoiceList(list = self.list, selection = selection)
 		self["summary_list"] = StaticText()
 		self["summary_selection"] = StaticText()
@@ -90,29 +93,44 @@ class ChoiceBox(Screen):
 		self.setTitle(windowTitle or _("Select"))
 
 	def autoResize(self):
-		orgwidth = self.instance.size().width()
-		orgpos = self.instance.position()
+		def x_offset():
+			return max([line[1][1] for line in self["list"].list])
+		def x_width(textsize):
+			def getListLineTextWidth(text):
+				self["autoresize"].setText(text)
+				return self["autoresize"].getSize()[0]
+			return max(max([getListLineTextWidth(line[0][0]) for line in self["list"].list]), textsize)
+
+		def getMaxDescriptionHeight():
+			def getDescrLineHeight(text):
+				if len(text)==3:
+					self["description"].setText(text[2])
+					return self["description"].instance.calculateSize().height()
+				return 0
+			return max([getDescrLineHeight(line[0]) for line in self["list"].list ])
+
 		textsize = self["text"].getSize()
 		count = len(self.list)
-		if count > 10:
-			count = 10
-		offset = 25 * count
-		wsizex = textsize[0] + 60
-		wsizey = textsize[1] + offset
-		if (520 > wsizex):
-			wsizex = 520
-		wsize = (wsizex, wsizey)
-		# resize
-		self.instance.resize(enigma.eSize(*wsize))
-		# resize label
-		self["text"].instance.resize(enigma.eSize(*textsize))
-		# move list
-		listsize = (wsizex, 25 * count)
+		count, scrollbar = (10, 20 + 5) if count > 10 else (count, 0)
+		offset = self["list"].l.getItemSize().height() * count
+		wsizex = x_width(textsize[0]) + x_offset() + 10 + scrollbar
+		#precount description size
+		descrsize = self["description"].getSize()
+		self["description"].instance.resize(enigma.eSize(*(wsizex - 20, descrsize[1] if descrsize[1] > 0 else 0)))
+		# then get true description height
+		descriptionHeight = getMaxDescriptionHeight()
+		wsizey = textsize[1] + offset + descriptionHeight
+		# move and resize screen
 		self["list"].instance.move(enigma.ePoint(0, textsize[1]))
-		self["list"].instance.resize(enigma.eSize(*listsize))
+		self.instance.resize(enigma.eSize(*(wsizex, wsizey)))
+		# move and resize description
+		self["description"].instance.move(enigma.ePoint(10, textsize[1] + offset))
+		self["description"].instance.resize(enigma.eSize(*(wsizex - 20, descriptionHeight)))
+		# resize list
+		self["list"].instance.resize(enigma.eSize(*(wsizex, offset)))
 		# center window
-		newwidth = wsize[0]
-		self.instance.move(enigma.ePoint((720-wsizex)/2, (576-wsizey)/(count > 7 and 2 or 3)))
+		width,height = enigma.getDesktop(0).size().width(), enigma.getDesktop(0).size().height()
+		self.instance.move(enigma.ePoint((width - wsizex)/2,(height - wsizey)/2))
 
 	def keyLeft(self):
 		pass
@@ -159,7 +177,7 @@ class ChoiceBox(Screen):
 
 	# lookups a key in the keymap, then runs it
 	def goKey(self, key):
-		if self.keymap.has_key(key):
+		if key in self.keymap:
 			entry = self.keymap[key]
 			self.goEntry(entry)
 
@@ -177,10 +195,11 @@ class ChoiceBox(Screen):
 		self.goKey("blue")
 
 	def updateSummary(self, curpos=0):
+		self.displayDescription(curpos)
 		pos = 0
 		summarytext = ""
 		for entry in self.summarylist:
-			if pos > curpos-2 and pos < curpos+5:
+			if curpos-2 < pos < curpos+5:
 				if pos == curpos:
 					summarytext += ">"
 					self["summary_selection"].setText(entry[1])
@@ -190,6 +209,12 @@ class ChoiceBox(Screen):
 			pos += 1
 		self["summary_list"].setText(summarytext)
 
+	def displayDescription(self, curpos=0):
+		if len(self.list[curpos][0]) > 2 and isinstance(self.list[curpos][0][2], str):
+			self["description"].setText(self.list[curpos][0][2])
+		else:
+			self["description"].setText("")
+
 	def cancel(self):
 		self.close(None)
 
@@ -197,7 +222,7 @@ class ChoiceBox(Screen):
 		if self.reorderConfig:
 			if len(self.list) > 0 and self.config_type.value != "":
 				self.session.openWithCallback(self.setDefaultChoiceListCallback, MessageBox, _("Sort list to default and exit?"), MessageBox.TYPE_YESNO)
-		elif self.keymap.has_key("menu"):
+		elif "menu" in self.keymap:
 			self.goKey("menu")
 		else:
 			self.cancel()

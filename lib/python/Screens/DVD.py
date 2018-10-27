@@ -21,9 +21,13 @@ class DVDSummary(Screen):
 		self["Title"] = Label("")
 		self["Time"] = Label("")
 		self["Chapter"] = Label("")
+		self["FullChapters"] = Label("")
 
 	def updateChapter(self, chapter):
 		self["Chapter"].setText(chapter)
+
+	def updateFullChapters(self, chapters):
+		self["FullChapters"].setText(chapters)
 
 	def setTitle(self, title):
 		self["Title"].setText(title)
@@ -55,7 +59,7 @@ class ChapterZap(Screen):
 
 	def keyNumberGlobal(self, number):
 		self.Timer.start(3000, True)
-		self.field = self.field + str(number)
+		self.field += str(number)
 		self["number"].setText(self.field)
 		if len(self.field) >= 4:
 			self.keyOK()
@@ -334,14 +338,17 @@ class DVDPlayer(Screen, InfoBarBase, InfoBarNotifications, InfoBarSeek, InfoBarP
 
 	def setChapterLabel(self):
 		chapterLCD = _("Menu")
+		chaptersLCD = _("DVD Menu")
 		chapterOSD = _("DVD Menu")
 		if self.currentTitle > 0:
 			chapterLCD = "%s %d" % (_("Chap."), self.currentChapter)
+			chaptersLCD = "%s %d/%d" % (_("Chapter"), self.currentChapter, self.totalChapters)
 			chapterOSD = "DVD %s %d/%d" % (_("Chapter"), self.currentChapter, self.totalChapters)
 			chapterOSD += " (%s %d/%d)" % (_("Title"), self.currentTitle, self.totalTitles)
 		self["chapterLabel"].setText(chapterOSD)
 		try:
 			self.session.summary and self.session.summary.updateChapter(chapterLCD)
+			self.session.summary and self.session.summary.updateFullChapters(chaptersLCD)
 		except:
 			pass
 
@@ -527,7 +534,7 @@ class DVDPlayer(Screen, InfoBarBase, InfoBarNotifications, InfoBarSeek, InfoBarP
 			self.session.openWithCallback(self.playPhysicalCB, MessageBox, text=_("Do you want to play DVD in drive?"), timeout=5 )
 
 	def playPhysicalCB(self, answer):
-		if answer == True:
+		if answer:
 			harddiskmanager.setDVDSpeed(harddiskmanager.getCD(), 1)
 			self.FileBrowserClosed(harddiskmanager.getAutofsMountpoint(harddiskmanager.getCD()))
 
@@ -601,9 +608,9 @@ class DVDPlayer(Screen, InfoBarBase, InfoBarNotifications, InfoBarSeek, InfoBarP
 			isNTSC = (video_attr_high & 0x10 == 0)
 			isLowResolution = (video_attr_low & 0x18 == 0x18)
 		except:
-#			If the service is an .iso or .img file we assume it is PAL
+#			If the service is an .iso or .img or .nrg file we assume it is PAL
 #			Sorry we cannot open image files here.
-			print "[DVD] Cannot read file or is ISO/IMG"
+			print "[DVD] Cannot read file or is ISO/IMG/NRG"
 		finally:
 			if ifofile is not None:
 				ifofile.close()
@@ -634,7 +641,7 @@ class DVDPlayer(Screen, InfoBarBase, InfoBarNotifications, InfoBarSeek, InfoBarP
 	def playLastCB(self, answer): # overwrite infobar cuesheet function
 		print "[DVD] playLastCB", answer, self.resume_point
 		if self.service:
-			if answer == True:
+			if answer:
 				self.resumeDvd()
 				seekable = self.getSeek()
 				if seekable:

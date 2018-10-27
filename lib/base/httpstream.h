@@ -6,7 +6,7 @@
 #include <lib/base/itssource.h>
 #include <lib/base/thread.h>
 
-class eHttpStream: public iTsSource, public Object, public eThread
+class eHttpStream: public iTsSource, public sigc::trackable, public eThread
 {
 	DECLARE_REF(eHttpStream);
 
@@ -20,6 +20,7 @@ class eHttpStream: public iTsSource, public Object, public eThread
 	size_t partialPktSz;
 	char* tmpBuf;
 	size_t tmpBufSize;
+	int startDelay;
 
 	int openUrl(const std::string &url, std::string &newurl);
 	void thread();

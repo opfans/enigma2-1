@@ -6,6 +6,8 @@
 
 //#define SHOW_WRITE_TIME
 
+DEFINE_REF(eFilePushThread);
+
 eFilePushThread::eFilePushThread(int blocksize, size_t buffersize):
 	 m_sg(NULL),
 	 m_stop(1),
@@ -18,7 +20,7 @@ eFilePushThread::eFilePushThread(int blocksize, size_t buffersize):
 	 m_run_state(0)
 {
 	if (m_buffer == NULL)
-		eFatal("[eFilePushThread] Failed to allocate %d bytes", buffersize);
+		eFatal("[eFilePushThread] Failed to allocate %zu bytes", buffersize);
 	CONNECT(m_messagepump.recv_msg, eFilePushThread::recvEvent);
 }
 
@@ -285,12 +287,16 @@ void eFilePushThread::setScatterGather(iFilePushScatterGather *sg)
 
 void eFilePushThread::sendEvent(int evt)
 {
+	/* add a ref, to make sure the object is not destroyed while the messagepump contains unhandled messages */
+	AddRef();
 	m_messagepump.send(evt);
 }
 
 void eFilePushThread::recvEvent(const int &evt)
 {
 	m_event(evt);
+	/* release the ref which we grabbed in sendEvent() */
+	Release();
 }
 
 void eFilePushThread::filterRecordData(const unsigned char *data, int len)
@@ -332,6 +338,10 @@ void eFilePushThreadRecorder::thread()
 		if (bytes < 0)
 		{
 			bytes = 0;
+			/* Check m_stop after interrupted syscall. */
+			if (m_stop) {
+				break;
+			}
 			if (errno == EINTR || errno == EBUSY || errno == EAGAIN)
 				continue;
 			if (errno == EOVERFLOW)

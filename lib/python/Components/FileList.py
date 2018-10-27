@@ -3,37 +3,63 @@ import re
 from MenuList import MenuList
 from Components.Harddisk import harddiskmanager
 from Tools.Directories import SCOPE_CURRENT_SKIN, resolveFilename, fileExists
-from enigma import RT_HALIGN_LEFT, eListboxPythonMultiContent, \
-	eServiceReference, eServiceCenter, gFont
+from enigma import RT_HALIGN_LEFT, eListboxPythonMultiContent, eServiceReference, eServiceCenter, gFont
 from Tools.LoadPixmap import LoadPixmap
 import skin
 
 EXTENSIONS = {
-		"m4a": "music",
-		"mp2": "music",
+		"dts": "music",
 		"mp3": "music",
 		"wav": "music",
+		"wave": "music",
+		"wv": "music",
+		"oga": "music",
 		"ogg": "music",
-		"wma": "music",
 		"flac": "music",
+		"m4a": "music",
+		"mp2": "music",
+		"m2a": "music",
+		"wma": "music",
+		"ac3": "music",
+		"mka": "music",
+		"aac": "music",
+		"ape": "music",
+		"alac": "music",
+		"amr": "music",
+		"au": "music",
+		"mid": "music",
 		"jpg": "picture",
-		"jpeg": "picture",
 		"png": "picture",
+		"gif": "picture",
 		"bmp": "picture",
-		"ts": "movie",
+		"jpeg": "picture",
+		"jpe": "picture",
+		"mpg": "movie",
+		"vob": "movie",
+		"m4v": "movie",
+		"mkv": "movie",
 		"avi": "movie",
 		"divx": "movie",
-		"m4v": "movie",
-		"mpg": "movie",
-		"mpeg": "movie",
-		"mkv": "movie",
+		"dat": "movie",
+		"flv": "movie",
 		"mp4": "movie",
 		"mov": "movie",
-		"m2ts": "movie",
+		"wmv": "movie",
+		"asf": "movie",
 		"3gp": "movie",
 		"3g2": "movie",
-		"asf": "movie",
-		"wmv": "movie",
+		"mpeg": "movie",
+		"mpe": "movie",
+		"rm": "movie",
+		"rmvb": "movie",
+		"ogm": "movie",
+		"ogv": "movie",
+		"m2ts": "movie",
+		"mts": "movie",
+		"ts": "movie",
+		"webm": "movie",
+		"pva": "movie",
+		"wtv": "movie",
 	}
 
 def FileEntryComponent(name, absolute = None, isDir = False):
@@ -45,7 +71,7 @@ def FileEntryComponent(name, absolute = None, isDir = False):
 	else:
 		extension = name.split('.')
 		extension = extension[-1].lower()
-		if EXTENSIONS.has_key(extension):
+		if extension in EXTENSIONS:
 			png = LoadPixmap(resolveFilename(SCOPE_CURRENT_SKIN, "extensions/" + EXTENSIONS[extension] + ".png"))
 		else:
 			png = None
@@ -281,7 +307,7 @@ def MultiFileSelectEntryComponent(name, absolute = None, isDir = False, selected
 	else:
 		extension = name.split('.')
 		extension = extension[-1].lower()
-		if EXTENSIONS.has_key(extension):
+		if extension in EXTENSIONS:
 			png = LoadPixmap(resolveFilename(SCOPE_CURRENT_SKIN, "extensions/" + EXTENSIONS[extension] + ".png"))
 		else:
 			png = None
@@ -324,7 +350,7 @@ class MultiFileSelectList(FileList):
 				realPathname = x[0][0]
 			else:
 				realPathname = self.current_directory + x[0][0]
-			if x[0][2] == True:
+			if x[0][2]:
 				SelectState = False
 				try:
 					self.selectedFiles.remove(realPathname)

@@ -1,16 +1,12 @@
 from Screen import Screen
 from Components.ConfigList import ConfigListScreen
 from Components.ActionMap import NumberActionMap
-from Components.config import config, getConfigListEntry, ConfigNothing, NoSave, ConfigPIN, configfile
+from Components.config import config, getConfigListEntry, ConfigNothing, NoSave, configfile
 
 from Components.Sources.StaticText import StaticText
-from Screens.ChoiceBox import ChoiceBox
 from Screens.MessageBox import MessageBox
 from Screens.InputBox import PinInput
-from Screens.ChannelSelection import service_types_tv
 from Tools.BoundFunction import boundFunction
-from enigma import eServiceCenter, eTimer, eServiceReference
-from operator import itemgetter
 
 class ProtectedScreen:
 	def __init__(self):
@@ -182,7 +178,7 @@ class ParentalControlSetup(Screen, ConfigListScreen, ProtectedScreen):
 			if answer1 == answer2:
 				warning_text = ""
 				if not answer2:
-					warning_text = _("You PIN code is 0000. This is the default PIN code and it disable parental control!\n")
+					warning_text = _("You PIN code is 0000. This is the default PIN code and it disables parental control!\n")
 				self.session.open(MessageBox, warning_text + _("The PIN code has been changed successfully."), MessageBox.TYPE_INFO, timeout=3)
 				config.ParentalControl.servicepin[0].value = answer1
 				config.ParentalControl.servicepin[0].save()

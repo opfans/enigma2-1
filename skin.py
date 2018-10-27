@@ -4,8 +4,7 @@ import xml.etree.cElementTree
 import os
 
 profile("LOAD:enigma_skin")
-from enigma import eSize, ePoint, eRect, gFont, eWindow, eLabel, ePixmap, eWindowStyleManager, \
-	addFont, gRGB, eWindowStyleSkinned, getDesktop
+from enigma import eSize, ePoint, eRect, gFont, eWindow, eLabel, ePixmap, eWindowStyleManager, addFont, gRGB, eWindowStyleSkinned, getDesktop
 from Components.config import ConfigSubsection, ConfigText, config
 from Components.Converter.Converter import Converter
 from Components.Sources.Source import Source, ObsoleteSource
@@ -16,6 +15,7 @@ from Components.RcModel import rc_model
 from Components.SystemInfo import SystemInfo
 
 colorNames = {}
+switchPixmap = {}
 # Predefined fonts, typically used in built-in screens and for components like
 # the movie list and so.
 fonts = {
@@ -76,11 +76,13 @@ def skin_user_skinname():
 
 # example: loadSkin("nemesis_greenline/skin.xml")
 config.skin = ConfigSubsection()
-DEFAULT_SKIN = "PLi-HD/skin.xml"
+DEFAULT_SKIN = SystemInfo["HasFullHDSkinSupport"] and "PLi-FullNightHD/skin.xml" or "PLi-HD/skin.xml"
 # on SD hardware, PLi-HD will not be available
 if not fileExists(resolveFilename(SCOPE_SKIN, DEFAULT_SKIN)):
 	# in that case, fallback to Magic (which is an SD skin)
 	DEFAULT_SKIN = "Magic/skin.xml"
+	if not fileExists(resolveFilename(SCOPE_SKIN, DEFAULT_SKIN)):
+		DEFAULT_SKIN = "skin.xml"
 config.skin.primary_skin = ConfigText(default=DEFAULT_SKIN)
 
 profile("LoadSkin")
@@ -220,8 +222,21 @@ def parseColor(s):
 		try:
 			return colorNames[s]
 		except:
-			raise SkinError("color '%s' must be #aarrggbb or valid named color" % (s))
+			raise SkinError("color '%s' must be #aarrggbb or valid named color" % s)
 	return gRGB(int(s[1:], 0x10))
+
+def parseParameter(s):
+	"""This function is responsible for parsing parameters in the skin, it can parse integers, floats, hex colors, hex integers and named colors."""
+	if s[0] == '#':
+		return int(s[1:], 16)
+	elif s[:2] == '0x':
+		return int(s, 16)
+	elif '.' in s:
+		return float(s)
+	elif s in colorNames:
+		return colorNames[s].argb()
+	else:
+		return int(s)
 
 def collectAttributes(skinAttributes, node, context, skin_path_prefix=None, ignore=(), filenames=frozenset(("pixmap", "pointer", "seek_pointer", "backgroundPixmap", "selectionPixmap", "sliderPixmap", "scrollbarbackgroundPixmap"))):
 	# walk all attributes
@@ -231,7 +246,10 @@ def collectAttributes(skinAttributes, node, context, skin_path_prefix=None, igno
 	for attrib, value in node.items():
 		if attrib not in ignore:
 			if attrib in filenames:
-				value = resolveFilename(SCOPE_CURRENT_SKIN, value, path_prefix=skin_path_prefix)
+				if "pointer" in attrib:
+					value = "%s%s%s" % (resolveFilename(SCOPE_CURRENT_SKIN, value.split(":")[0], path_prefix=skin_path_prefix), ":", value.split(":")[1])
+				else:
+					value = resolveFilename(SCOPE_CURRENT_SKIN, value, path_prefix=skin_path_prefix)
 			# Bit of a hack this, really. When a window has a flag (e.g. wfNoBorder)
 			# it needs to be set at least before the size is set, in order for the
 			# window dimensions to be calculated correctly in all situations.
@@ -265,7 +283,7 @@ def loadPixmap(path, desktop):
 		path = path[:option]
 	ptr = LoadPixmap(morphRcImagePath(path), desktop)
 	if ptr is None:
-		raise SkinError("pixmap file %s not found!" % (path))
+		raise SkinError("pixmap file %s not found!" % path)
 	return ptr
 
 class AttributeParser:
@@ -284,6 +302,8 @@ class AttributeParser:
 		for attrib, value in attrs:
 			self.applyOne(attrib, value)
 	def conditional(self, value):
+		pass
+	def objectTypes(self, value):
 		pass
 	def position(self, value):
 		if isinstance(value, tuple):
@@ -475,7 +495,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 					parameters["ServiceInfoRight"] = (450,0,1000,45)
 					parameters["SelectionListDescr"] = (45,3,1000,32)
 					parameters["SelectionListLock"] = (0,2,36,36)
-					parameters["ConfigListSeperator"] = 300
+					parameters["ConfigListSeperator"] = 500
 					parameters["VirtualKeyboard"] = (68,68)
 					parameters["PartnerBoxEntryListName"] = (8,2,225,38)
 					parameters["PartnerBoxEntryListIP"] = (180,2,225,38)
@@ -511,8 +531,23 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			if not fileExists(skinfile):
 				skinfile = resolveFilename(SCOPE_SKIN_IMAGE, filename, path_prefix=path_prefix)
 			if fileExists(skinfile):
-				print "[SKIN] loading include:", skinfile
+				print "[Skin] Loading include:", skinfile
 				loadSkin(skinfile)
+
+	for c in skin.findall('switchpixmap'):
+		for pixmap in c.findall('pixmap'):
+			get_attr = pixmap.attrib.get
+			name = get_attr('name')
+			if not name:
+				raise SkinError('[Skin] pixmap needs name attribute')
+			filename = get_attr('filename')
+			if not filename:
+				raise SkinError('[Skin] pixmap needs filename attribute')
+			resolved_png = resolveFilename(SCOPE_CURRENT_SKIN, filename, path_prefix=path_prefix)
+			if fileExists(resolved_png):
+				switchPixmap[name] = LoadPixmap(resolved_png, cached=True)
+			else:
+				raise SkinError('[Skin] switchpixmap pixmap filename="%s" (%s) not found' % (filename, resolved_png))
 
 	for c in skin.findall("colors"):
 		for color in c.findall("color"):
@@ -559,7 +594,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 				global fonts
 				fonts[name] = (font, size, height, width)
 			except Exception, ex:
-				print "[SKIN] bad font alias", ex
+				print "[Skin] Bad font alias", ex
 
 	for c in skin.findall("parameters"):
 		for parameter in c.findall("parameter"):
@@ -567,12 +602,12 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			try:
 				name = get("name")
 				value = get("value")
-				parameters[name] = "," in value and map(int, value.split(",")) or int(value)
+				parameters[name] = "," in value and map(parseParameter, value.split(",")) or parseParameter(value)
 			except Exception, ex:
-				print "[SKIN] bad parameter", ex
+				print "[Skin] Bad parameter", ex
 
 	for c in skin.findall("subtitles"):
-		from enigma import eWidget, eSubtitleWidget
+		from enigma import eSubtitleWidget
 		scale = ((1,1),(1,1))
 		for substyle in c.findall("sub"):
 			get_attr = substyle.attrib.get
@@ -633,7 +668,7 @@ def loadSingleSkinData(desktop, skin, path_prefix):
 			try:
 				style.setColor(eWindowStyleSkinned.__dict__["col" + colorType], color)
 			except:
-				raise SkinError("Unknown color %s" % (colorType))
+				raise SkinError("Unknown color %s" % colorType)
 				#pass
 			#print "  color:", type, color
 		x = eWindowStyleManager.getInstance()
@@ -829,22 +864,22 @@ def readSkin(screen, skin, names, desktop):
 	if myscreen is None and getattr(screen, "skin", None):
 		skin = screen.skin
 		print "[SKIN] Parsing embedded skin", name
-		if (isinstance(skin, tuple)):
+		if isinstance(skin, tuple):
 			for s in skin:
 				candidate = xml.etree.cElementTree.fromstring(s)
 				if candidate.tag == 'screen':
 					sid = candidate.attrib.get('id', None)
 					if (not sid) or (int(sid) == display_skin_id):
 						myscreen = candidate
-						break;
+						break
 			else:
-				print "[SKIN] Hey, no suitable screen!"
+				print "[Skin] No suitable screen!"
 		else:
 			myscreen = xml.etree.cElementTree.fromstring(skin)
 		if myscreen:
 			screen.parsedSkin = myscreen
 	if myscreen is None:
-		print "[SKIN] No skin to read..."
+		print "[Skin] No skin to read..."
 		myscreen = screen.parsedSkin = xml.etree.cElementTree.fromstring("<screen></screen>")
 
 	screen.skinAttributes = [ ]
@@ -921,7 +956,7 @@ def readSkin(screen, skin, names, desktop):
 
 			wrender = get_attr('render')
 			if not wrender:
-				raise SkinError("you must define a renderer with render= for source '%s'" % (wsource))
+				raise SkinError("you must define a renderer with render= for source '%s'" % wsource)
 			for converter in widget.findall("convert"):
 				ctype = converter.get('type')
 				assert ctype, "'convert'-tag needs a 'type'-attribute"
@@ -979,11 +1014,14 @@ def readSkin(screen, skin, names, desktop):
 			conditional = w.attrib.get('conditional')
 			if conditional and not [i for i in conditional.split(",") if i in screen.keys()]:
 				continue
+			objecttypes = w.attrib.get('objectTypes', '').split(",")
+			if len(objecttypes) > 1 and (objecttypes[0] not in screen.keys() or not [i for i in objecttypes[1:] if i == screen[objecttypes[0]].__class__.__name__]):
+					continue
 			p = processors.get(w.tag, process_none)
 			try:
 				p(w, context)
 			except SkinError, e:
-				print "[Skin] SKIN ERROR in screen '%s' widget '%s':" % (name, w.tag), e
+				print "[Skin] Error in screen '%s' widget '%s':" % (name, w.tag), e
 
 	def process_panel(widget, context):
 		n = widget.attrib.get('name')
@@ -991,7 +1029,7 @@ def readSkin(screen, skin, names, desktop):
 			try:
 				s = dom_screens[n]
 			except KeyError:
-				print "[SKIN] Unable to find screen '%s' referred in screen '%s'" % (n, name)
+				print "[Skin] Unable to find screen '%s' referred in screen '%s'" % (n, name)
 			else:
 				process_screen(s[0], context)
 		layout = widget.attrib.get('layout')
@@ -1015,11 +1053,12 @@ def readSkin(screen, skin, names, desktop):
 	}
 
 	try:
+		print "[Skin] Processing screen: %s" % name
 		context.x = 0 # reset offsets, all components are relative to screen
 		context.y = 0 # coordinates.
 		process_screen(myscreen, context)
 	except Exception, e:
-		print "[Skin] SKIN ERROR in %s:" % name, e
+		print "[Skin] Error in %s:" % name, e
 
 	from Components.GUIComponent import GUIComponent
 	nonvisited_components = [x for x in set(screen.keys()) - visited_components if isinstance(x, GUIComponent)]

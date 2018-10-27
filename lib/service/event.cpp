@@ -72,12 +72,23 @@ bool eServiceEvent::loadLanguage(Event *evt, const std::string &lang, int tsidon
 					 * Unfortunately we cannot recognise this, but we'll use the length of the short description
 					 * to guess whether we should concatenate both descriptions (without any spaces)
 					 */
-					if (m_extended_description.empty() && m_short_description.size() >= 180)
+					if (eed->getText().empty() && m_short_description.size() >= 180)
 					{
 						m_extended_description = m_short_description;
 						m_short_description = "";
 					}
-					m_extended_description += convertDVBUTF8(eed->getText(), table, tsidonid);
+					if (table == 0) // Two Char Mapping EED must be processed in one pass
+					{
+						m_tmp_extended_description += eed->getText();
+						if (eed->getDescriptorNumber() == eed->getLastDescriptorNumber())
+						{
+							m_extended_description += convertDVBUTF8(m_tmp_extended_description, table, tsidonid);
+						}
+					}
+					else
+					{
+						m_extended_description += convertDVBUTF8(eed->getText(), table, tsidonid);
+					}
 					retval=1;
 				}
 #if 0
@@ -190,6 +201,25 @@ RESULT eServiceEvent::parseFrom(Event *evt, int tsidonid)
 		return 0;
 	if (loadLanguage(evt, "---", tsidonid))
 		return 0;
+	return 0;
+}
+
+RESULT eServiceEvent::parseFrom(ATSCEvent *evt)
+{
+	m_begin = evt->getStartTime() + (time_t)315964800; /* ATSC GPS system time epoch is 00:00 Jan 6th 1980 */
+	m_event_id = evt->getEventId();
+	m_duration = evt->getLengthInSeconds();
+	m_event_name = evt->getTitle(m_language);
+	if (m_event_name.empty()) m_event_name = evt->getTitle(m_language_alternative);
+	if (m_event_name.empty()) m_event_name = evt->getTitle("");
+	return 0;
+}
+
+RESULT eServiceEvent::parseFrom(const ExtendedTextTableSection *sct)
+{
+	m_short_description = sct->getMessage(m_language);
+	if (m_short_description.empty()) m_short_description = sct->getMessage(m_language_alternative);
+	if (m_short_description.empty()) m_short_description = sct->getMessage("");
 	return 0;
 }
 

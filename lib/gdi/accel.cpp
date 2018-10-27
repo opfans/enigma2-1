@@ -44,6 +44,8 @@ extern void bcm_accel_fill(
 		int x, int y, int width, int height,
 		unsigned long color);
 extern bool bcm_accel_has_alphablending();
+extern int bcm_accel_accumulate();
+extern int bcm_accel_sync();
 #endif
 
 gAccel::gAccel():
@@ -157,7 +159,7 @@ int gAccel::blit(gUnmanagedSurface *dst, gUnmanagedSurface *src, const eRect &p,
 #ifdef BCM_ACCEL
 	if (!m_bcm_accel_state)
 	{
-		unsigned long pal_addr = 0;
+		unsigned int pal_addr = 0;
 		int src_format = 0;
 		if (src->bpp == 32)
 			src_format = 0;
@@ -169,7 +171,7 @@ int gAccel::blit(gUnmanagedSurface *dst, gUnmanagedSurface *src, const eRect &p,
 			{
 				/* sync pal */
 				pal_addr = src->stride * src->y;
-				unsigned long *pal = (unsigned long*)(((unsigned char*)src->data) + pal_addr);
+				unsigned int *pal = (unsigned int*)(((unsigned char*)src->data) + pal_addr);
 				pal_addr += src->data_phys;
 				for (int i = 0; i < src->clut.colors; ++i)
 					*pal++ = src->clut.data[i].argb() ^ 0xFF000000;
@@ -213,6 +215,28 @@ int gAccel::fill(gUnmanagedSurface *dst, const eRect &area, unsigned long col)
 			area.left(), area.top(), area.width(), area.height(),
 			col);
 		return 0;
+	}
+#endif
+	return -1;
+}
+
+int gAccel::accumulate()
+{
+#ifdef BCM_ACCEL
+	if (!m_bcm_accel_state)
+	{
+		return bcm_accel_accumulate();
+	}
+#endif
+	return -1;
+}
+
+int gAccel::sync()
+{
+#ifdef BCM_ACCEL
+	if (!m_bcm_accel_state)
+	{
+		return bcm_accel_sync();
 	}
 #endif
 	return -1;
@@ -268,7 +292,7 @@ int gAccel::accelAlloc(gUnmanagedSurface* surface)
 		}
 	}
 
-	eDebug("[gAccel] alloc failed\n");
+	eDebug("[gAccel] alloc failed");
 	return -3;
 }
 

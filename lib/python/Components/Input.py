@@ -1,4 +1,3 @@
-from HTMLComponent import HTMLComponent
 from GUIComponent import GUIComponent
 from VariableText import VariableText
 
@@ -6,7 +5,7 @@ from enigma import eLabel
 
 from Tools.NumericalTextInput import NumericalTextInput
 
-class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
+class Input(VariableText, GUIComponent, NumericalTextInput):
 	TEXT = 0
 	PIN = 1
 	NUMBER = 2
@@ -190,7 +189,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 			self.deleteAllChars()
 			self.allmarked = False
 		else:
-			self.insertChar(u" ", self.currPos, False, True);
+			self.insertChar(u" ", self.currPos, False, True)
 			self.innerright()
 		self.update()
 
@@ -201,7 +200,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 			self.deleteAllChars()
 			self.allmarked = False
 		else:
-			self.deleteChar(self.currPos);
+			self.deleteChar(self.currPos)
 			if self.maxSize and self.overwrite:
 				self.innerright()
 		self.update()
@@ -214,7 +213,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 			self.allmarked = False
 		else:
 			if self.currPos > 0:
-				self.deleteChar(self.currPos-1);
+				self.deleteChar(self.currPos-1)
 				if not self.maxSize and self.offset > 0:
 					self.offset -= 1
 				self.currPos -= 1
@@ -227,7 +226,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 			self.deleteAllChars()
 			self.allmarked = False
 		else:
-			self.deleteChar(self.currPos);
+			self.deleteChar(self.currPos)
 		self.update()
 
 	def toggleOverwrite(self):
@@ -242,7 +241,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 		if self.allmarked:
 			self.deleteAllChars()
 			self.allmarked = False
-		self.insertChar(unichr(code), self.currPos, False, False);
+		self.insertChar(unichr(code), self.currPos, False, False)
 		self.innerright()
 		self.update()
 
@@ -256,7 +255,7 @@ class Input(VariableText, HTMLComponent, GUIComponent, NumericalTextInput):
 		if self.allmarked:
 			self.deleteAllChars()
 			self.allmarked = False
-		self.insertChar(newChar, self.currPos, owr, False);
+		self.insertChar(newChar, self.currPos, owr, False)
 		if self.type == self.PIN or self.type == self.NUMBER:
 			self.innerright()
 		self.update()

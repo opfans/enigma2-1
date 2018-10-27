@@ -1,4 +1,4 @@
-from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersCable, eDVBFrontendParametersTerrestrial
+from enigma import eDVBFrontendParametersSatellite, eDVBFrontendParametersCable, eDVBFrontendParametersTerrestrial, eDVBFrontendParametersATSC
 from Components.NimManager import nimmanager
 
 def orbpos(pos):
@@ -57,11 +57,11 @@ def channel2frequency(channel, nim):
 			return (474000 + 8000*(channel-21))*1000
 	return 474000000
 
-def ConvertToHumanReadable(tp, type = None):
+def ConvertToHumanReadable(tp, tunertype = None):
 	ret = { }
-	if type is None:
-		type = tp.get("tuner_type", "None")
-	if type == "DVB-S":
+	if tunertype is None:
+		tunertype = tp.get("tuner_type", "None")
+	if tunertype == "DVB-S":
 		ret["tuner_type"] = _("Satellite")
 		ret["inversion"] = {
 			eDVBFrontendParametersSatellite.Inversion_Unknown : _("Auto"),
@@ -73,11 +73,11 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersSatellite.FEC_1_2 : "1/2",
 			eDVBFrontendParametersSatellite.FEC_2_3 : "2/3",
 			eDVBFrontendParametersSatellite.FEC_3_4 : "3/4",
+			eDVBFrontendParametersSatellite.FEC_3_5 : "3/5",
+			eDVBFrontendParametersSatellite.FEC_4_5 : "4/5",
 			eDVBFrontendParametersSatellite.FEC_5_6 : "5/6",
 			eDVBFrontendParametersSatellite.FEC_6_7 : "6/7",
 			eDVBFrontendParametersSatellite.FEC_7_8 : "7/8",
-			eDVBFrontendParametersSatellite.FEC_3_5 : "3/5",
-			eDVBFrontendParametersSatellite.FEC_4_5 : "4/5",
 			eDVBFrontendParametersSatellite.FEC_8_9 : "8/9",
 			eDVBFrontendParametersSatellite.FEC_9_10 : "9/10"}.get(tp.get("fec_inner"))
 		ret["modulation"] = {
@@ -112,7 +112,16 @@ def ConvertToHumanReadable(tp, type = None):
 				eDVBFrontendParametersSatellite.Pilot_Unknown : _("Auto"),
 				eDVBFrontendParametersSatellite.Pilot_On : _("On"),
 				eDVBFrontendParametersSatellite.Pilot_Off : _("Off")}.get(tp.get("pilot"))
-	elif type == "DVB-C":
+			ret["pls_mode"] = {
+				eDVBFrontendParametersSatellite.PLS_Root : _("Root"),
+				eDVBFrontendParametersSatellite.PLS_Gold : _("Gold"),
+				eDVBFrontendParametersSatellite.PLS_Combo : _("Combo"),
+				eDVBFrontendParametersSatellite.PLS_Unknown : _("Unknown")}.get(tp.get("pls_mode"))
+		else:
+			ret["pls_mode"] = None
+			ret["is_id"] = None
+			ret["pls_code"] = None
+	elif tunertype == "DVB-C":
 		ret["tuner_type"] = _("Cable")
 		ret["modulation"] = {
 			eDVBFrontendParametersCable.Modulation_Auto: _("Auto"),
@@ -131,16 +140,17 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersCable.FEC_1_2 : "1/2",
 			eDVBFrontendParametersCable.FEC_2_3 : "2/3",
 			eDVBFrontendParametersCable.FEC_3_4 : "3/4",
-			eDVBFrontendParametersCable.FEC_5_6 : "5/6",
-			eDVBFrontendParametersCable.FEC_7_8 : "7/8",
-			eDVBFrontendParametersCable.FEC_8_9 : "8/9",
 			eDVBFrontendParametersCable.FEC_3_5 : "3/5",
 			eDVBFrontendParametersCable.FEC_4_5 : "4/5",
+			eDVBFrontendParametersCable.FEC_5_6 : "5/6",
+			eDVBFrontendParametersCable.FEC_6_7 : "6/7",
+			eDVBFrontendParametersCable.FEC_7_8 : "7/8",
+			eDVBFrontendParametersCable.FEC_8_9 : "8/9",
 			eDVBFrontendParametersCable.FEC_9_10 : "9/10"}.get(tp.get("fec_inner"))
 		ret["system"] = {
 			eDVBFrontendParametersCable.System_DVB_C_ANNEX_A : "DVB-C",
 			eDVBFrontendParametersCable.System_DVB_C_ANNEX_C : "DVB-C ANNEX C"}.get(tp.get("system"))
-	elif type == "DVB-T":
+	elif tunertype == "DVB-T":
 		ret["tuner_type"] = _("Terrestrial")
 		ret["bandwidth"] = {
 			0 : _("Auto"),
@@ -155,6 +165,8 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersTerrestrial.FEC_1_2 : "1/2",
 			eDVBFrontendParametersTerrestrial.FEC_2_3 : "2/3",
 			eDVBFrontendParametersTerrestrial.FEC_3_4 : "3/4",
+			eDVBFrontendParametersTerrestrial.FEC_3_5 : "3/5",
+			eDVBFrontendParametersTerrestrial.FEC_4_5 : "4/5",
 			eDVBFrontendParametersTerrestrial.FEC_5_6 : "5/6",
 			eDVBFrontendParametersTerrestrial.FEC_6_7 : "6/7",
 			eDVBFrontendParametersTerrestrial.FEC_7_8 : "7/8",
@@ -164,6 +176,8 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersTerrestrial.FEC_1_2 : "1/2",
 			eDVBFrontendParametersTerrestrial.FEC_2_3 : "2/3",
 			eDVBFrontendParametersTerrestrial.FEC_3_4 : "3/4",
+			eDVBFrontendParametersTerrestrial.FEC_3_5 : "3/5",
+			eDVBFrontendParametersTerrestrial.FEC_4_5 : "4/5",
 			eDVBFrontendParametersTerrestrial.FEC_5_6 : "5/6",
 			eDVBFrontendParametersTerrestrial.FEC_6_7 : "6/7",
 			eDVBFrontendParametersTerrestrial.FEC_7_8 : "7/8",
@@ -206,7 +220,7 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersTerrestrial.System_DVB_T : "DVB-T",
 			eDVBFrontendParametersTerrestrial.System_DVB_T2 : "DVB-T2"}.get(tp.get("system"))
 		ret["channel"] = _("CH%s") % getChannelNumber(tp.get("frequency"), "DVB-T")
-	elif type == "ATSC":
+	elif tunertype == "ATSC":
 		ret["tuner_type"] = "ATSC"
 		ret["modulation"] = {
 			eDVBFrontendParametersATSC.Modulation_Auto: _("Auto"),
@@ -215,8 +229,8 @@ def ConvertToHumanReadable(tp, type = None):
 			eDVBFrontendParametersATSC.Modulation_QAM64 : "QAM64",
 			eDVBFrontendParametersATSC.Modulation_QAM128 : "QAM128",
 			eDVBFrontendParametersATSC.Modulation_QAM256 : "QAM256",
-			eDVBFrontendParametersATSC.Modulation_VSB_8 : "VSB_8",
-			eDVBFrontendParametersATSC.Modulation_VSB_16 : "VSB_16"}.get(tp.get("modulation"))
+			eDVBFrontendParametersATSC.Modulation_VSB_8 : "8VSB",
+			eDVBFrontendParametersATSC.Modulation_VSB_16 : "16VSB"}.get(tp.get("modulation"))
 		ret["inversion"] = {
 			eDVBFrontendParametersATSC.Inversion_Unknown : _("Auto"),
 			eDVBFrontendParametersATSC.Inversion_On : _("On"),
@@ -224,8 +238,8 @@ def ConvertToHumanReadable(tp, type = None):
 		ret["system"] = {
 			eDVBFrontendParametersATSC.System_ATSC : "ATSC",
 			eDVBFrontendParametersATSC.System_DVB_C_ANNEX_B : "DVB-C ANNEX B"}.get(tp.get("system"))
-	elif type != "None":
-		print "ConvertToHumanReadable: no or unknown type in tpdata dict for type:", type
+	elif tunertype != "None":
+		print "ConvertToHumanReadable: no or unknown tunertype in tpdata dict for tunertype:", tunertype
 	for k,v in tp.items():
 		if k not in ret:
 			ret[k] = v

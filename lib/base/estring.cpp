@@ -351,46 +351,42 @@ static inline unsigned int recode(unsigned char d, int cp)
 	}
 }
 
-int UnicodeToUTF8(long c, char *out, int max)
+std::string UnicodeToUTF8(long c)
 {
-	if (max > 0 && c < 0x80 ) {
-		*out = c;
-		return 1;
+	if ( c < 0x80 ) {
+		char utf[2] = {static_cast<char>(c), 0};
+		return std::string(utf, 1);
 	}
-	else if (max > 1 && c < 0x800) {
-		*(out++) = 0xc0 | (c >> 6);
-		*out     = 0x80 | (c & 0x3f);
-		return 2;
+	else if ( c < 0x800) {
+		char utf[3] = { static_cast<char>(0xc0 | (c >> 6)), static_cast<char>(0x80 | (c & 0x3f)), 0};
+		return std::string(utf, 2);
 	}
-	else if (max > 2 && c < 0x10000) {
-		*(out++) = 0xe0 | (c >> 12);
-		*(out++) = 0x80 | ((c >> 6) & 0x3f);
-		*out     = 0x80 | (c & 0x3f);
-		return 3;
+	else if ( c < 0x10000) {
+		char utf[4] = { static_cast<char>(0xe0 | (c >> 12)), static_cast<char>(0x80 | ((c >> 6) & 0x3f)),
+				static_cast<char>(0x80 | (c & 0x3f)), 0};
+		return std::string(utf, 3);
 	}
-	else if (max > 3 && c < 0x200000) {
-		*(out++) = 0xf0 | (c >> 18);
-		*(out++) = 0x80 | ((c >> 12) & 0x3f);
-		*(out++) = 0x80 | ((c >> 6) & 0x3f);
-		*out     = 0x80 | (c & 0x3f);
-		return 4;
+	else if ( c < 0x200000) {
+		char utf[5] = { static_cast<char>(0xf0 | (c >> 18)), static_cast<char>(0x80 | ((c >> 12) & 0x3f)),
+				static_cast<char>(0x80 | ((c >> 6) & 0x3f)), static_cast<char>(0x80 | (c & 0x3f)), 0};
+		return std::string(utf, 4);
 	}
-	eDebug("[UnicodeToUTF8] invalid unicode character or not enough space to convert: code=0x%08x, max=%d", c, max);
-	return 0; // not enough space to convert or not a valid unicode
+	eDebug("[UnicodeToUTF8] invalid unicode character: code=0x%08lx", c); // not a valid unicode
+	return "";
 }
 
 std::string GB18030ToUTF8(const char *szIn, int len, int *pconvertedLen)
 {
-	char szOut[len * 2];
+	std::string szOut = "";
 	unsigned long code = 0;
-	int t = 0, i;
+	int i;
 
 	for (i = 0; i < len;) {
 		int cl = 0;
 
 		cl = gb18030_mbtowc((ucs4_t*)(&code), (const unsigned char *)szIn + i, len - i);
 		if (cl > 0) {
-			t += UnicodeToUTF8(code, szOut + t, len*2 - t);
+			szOut += UnicodeToUTF8(code);
 			i += cl;
 		}
 		else
@@ -399,14 +395,14 @@ std::string GB18030ToUTF8(const char *szIn, int len, int *pconvertedLen)
 
 	if (pconvertedLen)
 		*pconvertedLen = i;
-	return std::string(szOut, t);
+	return szOut;
 }
 
 std::string Big5ToUTF8(const char *szIn, int len, int *pconvertedLen)
 {
-	char szOut[len * 2];
+	std::string szOut = "";
 	unsigned long code = 0;
-	int t = 0, i = 0;
+	int i = 0;
 
 	for (;i < len; i++) {
 		if (((unsigned char)szIn[i] > 0xA0) && (unsigned char)szIn[i] <= 0xF9 &&
@@ -414,19 +410,16 @@ std::string Big5ToUTF8(const char *szIn, int len, int *pconvertedLen)
 			  (((unsigned char)szIn[i+1] >  0xA0) && ((unsigned char)szIn[i+1] < 0xFF))
 			) ) {
 			big5_mbtowc((ucs4_t*)(&code), (const unsigned char *)szIn + i, 2);
-			t += UnicodeToUTF8(code, szOut + t, len*2 - t);
+			szOut += UnicodeToUTF8(code);
 			i++;
 		}
 		else
-			szOut[t++] = szIn[i];
+			szOut += szIn[i];
 	}
-
-        if (i < len && szIn[i] && ((unsigned char)szIn[i] < 0xA0 || (unsigned char)szIn[i] > 0xF9))
-		szOut[t++] = szIn[i++];
 
 	if (pconvertedLen)
 		*pconvertedLen = i;
-	return std::string(szOut, t);
+	return szOut;
 }
 
 std::string convertDVBUTF8(const unsigned char *data, int len, int table, int tsidonid,int *pconvertedLen)
@@ -456,86 +449,87 @@ std::string convertDVBUTF8(const unsigned char *data, int len, int table, int ts
 
 	// first byte in strings may override general encoding table.
 	if (!no_table_id){
-		switch(data[0])
+	    switch(data[0])
+	    {
+		case ISO8859_5 ... ISO8859_15:
+			// For Thai providers, encoding char is present but faulty.
+			if (table != 11)
+				table = data[i] + 4;
+			++i;
+			// eDebug("[convertDVBUTF8] (1..11)text encoded in ISO-8859-%d", table);
+			break;
+		case ISO8859_xx:
 		{
-			case ISO8859_5 ... ISO8859_15:
-				// For Thai providers, encoding char is present but faulty.
-				if (table != 11)
-					table = data[i] + 4;
-				++i;
-				// eDebug("[convertDVBUTF8] (1..11)text encoded in ISO-8859-%d", table);
-				break;
-			case ISO8859_xx:
+			int n = data[++i] << 8;
+			n |= (data[++i]);
+			// eDebug("[convertDVBUTF8] (0x10)text encoded in ISO-8859-%d", n);
+			++i;
+			switch(n)
 			{
-				int n = data[++i] << 8;
-				n |= (data[++i]);
-				// eDebug("[convertDVBUTF8] (0x10)text encoded in ISO-8859-%d", n);
-				++i;
-				switch(n)
-				{
-					case ISO8859_12:
-						eDebug("[convertDVBUTF8] ISO8859-12 encoding unsupported");
-						break;
-					default:
-						table = n;
-						break;
-				}
-				break;
+				case ISO8859_12:
+					eDebug("[convertDVBUTF8] ISO8859-12 encoding unsupported");
+					break;
+				default:
+					table = n;
+					break;
 			}
-			case UNICODE_ENCODING: //  Basic Multilingual Plane of ISO/IEC 10646-1 enc  (UTF-16... Unicode)
-				table = UNICODE_ENCODING;
-				tsidonid = 0;
-				++i;
-				break;
-			case KSX1001_ENCODING:
-				++i;
-				eDebug("[convertDVBUTF8] KSC 5601 encing unsupported.");
-				break;
-			case GB18030_ENCODING: // GB-2312-1980 enc.
-				++i;
-				table = GB18030_ENCODING;
-				break;
-			case BIG5_ENCODING: // Big5 subset of ISO/IEC 10646-1 enc.
-				++i;
-				table = BIG5_ENCODING;
-				break;
-			case UTF8_ENCODING: // UTF-8 encoding of ISO/IEC 10646-1
-				++i;
-				table = UTF8_ENCODING;
-				break;
-			case UTF16BE_ENCODING:
-				++i;
-				table = UTF16BE_ENCODING;
-				break;
-			case UTF16LE_ENCODING:
-				++i;
-				table = UTF16LE_ENCODING;
-				break;
-			case 0x1F:
-				{
-					// Attempt to decode Freesat Huffman encoded string
-					std::string decoded_string = huffmanDecoder.decode(data, len);
-					if (!decoded_string.empty())
-						return decoded_string;
-				}
-				++i;
-				eDebug("[convertDVBUTF8] failed to decode bbc freesat huffman");
-				break;
-			case 0x0:
-			case 0xC ... 0xF:
-			case 0x18 ... 0x1E:
-				eDebug("[convertDVBUTF8] reserved %d", data[0]);
-				++i;
-				break;
+			break;
 		}
+		case UNICODE_ENCODING: //  Basic Multilingual Plane of ISO/IEC 10646-1 enc  (UTF-16... Unicode)
+			table = UNICODE_ENCODING;
+			tsidonid = 0;
+			++i;
+			break;
+		case KSX1001_ENCODING:
+			++i;
+			eDebug("[convertDVBUTF8] KSC 5601 encing unsupported.");
+			break;
+		case GB18030_ENCODING: // GB-2312-1980 enc.
+			++i;
+			table = GB18030_ENCODING;
+			break;
+		case BIG5_ENCODING: // Big5 subset of ISO/IEC 10646-1 enc.
+			++i;
+			table = BIG5_ENCODING;
+			break;
+		case UTF8_ENCODING: // UTF-8 encoding of ISO/IEC 10646-1
+			++i;
+			table = UTF8_ENCODING;
+			break;
+		case UTF16BE_ENCODING:
+			++i;
+			table = UTF16BE_ENCODING;
+			break;
+		case UTF16LE_ENCODING:
+			++i;
+			table = UTF16LE_ENCODING;
+			break;
+		case 0x1F:
+			{
+				// Attempt to decode Freesat Huffman encoded string
+				std::string decoded_string = huffmanDecoder.decode(data, len);
+				if (!decoded_string.empty())
+					return decoded_string;
+			}
+			++i;
+			eDebug("[convertDVBUTF8] failed to decode bbc freesat huffman");
+			break;
+		case 0x0:
+		case 0xC ... 0xF:
+		case 0x18 ... 0x1E:
+			eDebug("[convertDVBUTF8] reserved %d", data[0]);
+			++i;
+			break;
+	    }
 	}
+
 	bool useTwoCharMapping = !table || (tsidonid && encodingHandler.getTransponderUseTwoCharMapping(tsidonid));
 
 	if (useTwoCharMapping && table == 5) { // i hope this dont break other transponders which realy use ISO8859-5 and two char byte mapping...
 //		eDebug("[convertDVBUTF8] Cyfra / Cyfrowy Polsat HACK... override given ISO8859-5 with ISO6937");
 		table = 0;
 	}
-	else if (table <= 0)
+	else if ( table == -1 )
 		table = defaultEncodingTable;
 
 	switch(table)
@@ -556,9 +550,8 @@ std::string convertDVBUTF8(const unsigned char *data, int len, int table, int ts
 				*pconvertedLen += len;
 			break;
 		default:
-			char res[2048];
-			size_t t = 0;
-			while (i < len && t < sizeof(res))
+			std::string res = "";
+			while (i < len)
 			{
 				unsigned long code = 0;
 				if (useTwoCharMapping && i+1 < len && (code = doVideoTexSuppl(data[i], data[i+1])))
@@ -608,11 +601,11 @@ std::string convertDVBUTF8(const unsigned char *data, int len, int table, int ts
 
 				if (!code)
 					continue;
-				t += UnicodeToUTF8(code, res + t, sizeof(res) - t);
+				res += UnicodeToUTF8(code);
 			}
 			if (pconvertedLen)
 				*pconvertedLen = i;
-			output = std::string((char*)res, t);
+			output = res;
 			break;
 	}
 
@@ -686,16 +679,16 @@ std::string convertUTF8DVB(const std::string &string, int table)
 
 std::string convertLatin1UTF8(const std::string &string)
 {
-	unsigned int t = 0, i = 0, len = string.size();
+	unsigned int i = 0, len = string.size();
 
-	char res[2048];
+	std::string res = "";
 
 	while (i < len)
 	{
 		unsigned long code = (unsigned char)string[i++];
-		t += UnicodeToUTF8(code, res + t, sizeof(res) - t);
+		res += UnicodeToUTF8(code);
 	}
-	return std::string((char*)res, t);
+	return res;
 }
 
 int isUTF8(const std::string &string)

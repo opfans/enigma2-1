@@ -245,7 +245,7 @@ int eDVBVideo::m_close_invalidates_attributes = -1;
 
 eDVBVideo::eDVBVideo(eDVBDemux *demux, int dev)
 	: m_demux(demux), m_dev(dev),
-	m_width(-1), m_height(-1), m_framerate(-1), m_aspect(-1), m_progressive(-1)
+	m_width(-1), m_height(-1), m_framerate(-1), m_aspect(-1), m_progressive(-1), m_gamma(-1)
 {
 	char filename[128];
 	sprintf(filename, "/dev/dvb/adapter%d/video%d", demux ? demux->adapter : 0, dev);
@@ -553,13 +553,28 @@ void eDVBVideo::video_event(int)
 				eDebugNoNewLine("PROGRESSIVE_CHANGED %d\n", m_progressive);
 				/* emit */ m_event(event);
 			}
+			else if (evt.type == 17 /*VIDEO_EVENT_GAMMA_CHANGED*/)
+			{
+				struct iTSMPEGDecoder::videoEvent event;
+				event.type = iTSMPEGDecoder::videoEvent::eventGammaChanged;
+				/*
+				 * Possible gamma values
+				 * 0: Traditional gamma - SDR luminance range
+				 * 1: Traditional gamma - HDR luminance range
+				 * 2: SMPTE ST2084 (aka HDR10)
+				 * 3: Hybrid Log-gamma
+				 */
+				m_gamma = event.gamma = evt.u.frame_rate;
+				eDebugNoNewLine("GAMMA_CHANGED %d\n", m_gamma);
+				/* emit */ m_event(event);
+			}
 			else
 				eDebugNoNewLine("unhandled DVBAPI Video Event %d\n", evt.type);
 		}
 	}
 }
 
-RESULT eDVBVideo::connectEvent(const Slot1<void, struct iTSMPEGDecoder::videoEvent> &event, ePtr<eConnection> &conn)
+RESULT eDVBVideo::connectEvent(const sigc::slot1<void, struct iTSMPEGDecoder::videoEvent> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_event.connect(event));
 	return 0;
@@ -640,6 +655,21 @@ int eDVBVideo::getFrameRate()
 		}
 	}
 	return m_framerate;
+}
+
+int eDVBVideo::getGamma()
+{
+	/* when closing the video device invalidates the attributes, we can rely on VIDEO_EVENTs */
+	if (!m_close_invalidates_attributes)
+	{
+		if (m_gamma == -1)
+		{
+			char tmp[64];
+			sprintf(tmp, "/proc/stb/vmpeg/%d/gamma", m_dev);
+			CFile::parseIntHex(&m_gamma, tmp);
+		}
+	}
+	return m_gamma;
 }
 
 DEFINE_REF(eDVBPCR);
@@ -857,7 +887,7 @@ int eTSMPEGDecoder::setState()
 		if ((m_vpid >= 0) && (m_vpid < 0x1FFF))
 		{
 			m_video = new eDVBVideo(m_demux, m_decoder);
-			m_video->connectEvent(slot(*this, &eTSMPEGDecoder::video_event), m_video_event_conn);
+			m_video->connectEvent(sigc::mem_fun(*this, &eTSMPEGDecoder::video_event), m_video_event_conn);
 			if (m_video->startPid(m_vpid, m_vtype))
 				res = -1;
 		}
@@ -969,7 +999,7 @@ eTSMPEGDecoder::eTSMPEGDecoder(eDVBDemux *demux, int decoder)
 {
 	if (m_demux)
 	{
-		m_demux->connectEvent(slot(*this, &eTSMPEGDecoder::demux_event), m_demux_event_conn);
+		m_demux->connectEvent(sigc::mem_fun(*this, &eTSMPEGDecoder::demux_event), m_demux_event_conn);
 	}
 	CONNECT(m_showSinglePicTimer->timeout, eTSMPEGDecoder::finishShowSinglePic);
 	m_state = stateStop;
@@ -1274,7 +1304,7 @@ void eTSMPEGDecoder::finishShowSinglePic()
 	}
 }
 
-RESULT eTSMPEGDecoder::connectVideoEvent(const Slot1<void, struct videoEvent> &event, ePtr<eConnection> &conn)
+RESULT eTSMPEGDecoder::connectVideoEvent(const sigc::slot1<void, struct videoEvent> &event, ePtr<eConnection> &conn)
 {
 	conn = new eConnection(this, m_video_event.connect(event));
 	return 0;
@@ -1317,5 +1347,12 @@ int eTSMPEGDecoder::getVideoAspect()
 {
 	if (m_video)
 		return m_video->getAspect();
+	return -1;
+}
+
+int eTSMPEGDecoder::getVideoGamma()
+{
+	if (m_video)
+		return m_video->getGamma();
 	return -1;
 }

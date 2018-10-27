@@ -42,17 +42,16 @@ public:
 typedef struct _GstElement GstElement;
 
 class eServiceXine: public iPlayableService, public iPauseableService,
-	public iServiceInformation, public iSeekableService, public Object
+	public iServiceInformation, public iSeekableService, public sigc::trackable
 {
 	DECLARE_REF(eServiceXine);
 public:
 	virtual ~eServiceXine();
 
 		// iPlayableService
-	RESULT connectEvent(const Slot2<void,iPlayableService*,int> &event, ePtr<eConnection> &connection);
+	RESULT connectEvent(const sigc::slot2<void,iPlayableService*,int> &event, ePtr<eConnection> &connection);
 	RESULT start();
 	RESULT stop();
-	RESULT setTarget(int target);
 
 	RESULT pause(ePtr<iPauseableService> &ptr);
 	RESULT setSlowMotion(int ratio);
@@ -61,16 +60,17 @@ public:
 	RESULT seek(ePtr<iSeekableService> &ptr);
 
 		// not implemented (yet)
-	RESULT audioChannel(ePtr<iAudioChannelSelection> &ptr) { ptr = 0; return -1; }
-	RESULT audioTracks(ePtr<iAudioTrackSelection> &ptr) { ptr = 0; return -1; }
-	RESULT frontendInfo(ePtr<iFrontendInformation> &ptr) { ptr = 0; return -1; }
-	RESULT subServices(ePtr<iSubserviceList> &ptr) { ptr = 0; return -1; }
-	RESULT timeshift(ePtr<iTimeshiftService> &ptr) { ptr = 0; return -1; }
-	RESULT cueSheet(ePtr<iCueSheet> &ptr) { ptr = 0; return -1; }
-	RESULT subtitle(ePtr<iSubtitleOutput> &ptr) { ptr = 0; return -1; }
-	RESULT audioDelay(ePtr<iAudioDelay> &ptr) { ptr = 0; return -1; }
-	RESULT rdsDecoder(ePtr<iRdsDecoder> &ptr) { ptr = 0; return -1; }
-	RESULT keys(ePtr<iServiceKeys> &ptr) { ptr = 0; return -1; }
+	RESULT setTarget(int target, bool noaudio = false) { return -1; }
+	RESULT audioChannel(ePtr<iAudioChannelSelection> &ptr) { ptr = nullptr; return -1; }
+	RESULT audioTracks(ePtr<iAudioTrackSelection> &ptr) { ptr = nullptr; return -1; }
+	RESULT frontendInfo(ePtr<iFrontendInformation> &ptr) { ptr = nullptr; return -1; }
+	RESULT subServices(ePtr<iSubserviceList> &ptr) { ptr = nullptr; return -1; }
+	RESULT timeshift(ePtr<iTimeshiftService> &ptr) { ptr = nullptr; return -1; }
+	RESULT cueSheet(ePtr<iCueSheet> &ptr) { ptr = nullptr; return -1; }
+	RESULT subtitle(ePtr<iSubtitleOutput> &ptr) { ptr = nullptr; return -1; }
+	RESULT audioDelay(ePtr<iAudioDelay> &ptr) { ptr = nullptr; return -1; }
+	RESULT rdsDecoder(ePtr<iRdsDecoder> &ptr) { ptr = nullptr; return -1; }
+	RESULT keys(ePtr<iServiceKeys> &ptr) { ptr = nullptr; return -1; }
 
 		// iPausableService
 	RESULT pause();
@@ -94,7 +94,7 @@ private:
 	friend class eServiceFactoryXine;
 	std::string m_filename;
 	eServiceXine(const char *filename);
-	Signal2<void,iPlayableService*,int> m_event;
+	sigc::signal2<void,iPlayableService*,int> m_event;
 
 	xine_stream_t *stream;
 	xine_video_port_t *vo_port;

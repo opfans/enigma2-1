@@ -29,22 +29,26 @@ TUXBOX_APPS_DVB
 AM_CONDITIONAL(HAVE_GIT_DIR, test -d "$srcdir/.git")
 AM_CONDITIONAL(HAVE_FAKE_GIT_DIR, test -f "$srcdir/.git/last_commit_info")
 
-dnl versions of gstreamer and plugins-base
-AC_ARG_WITH(gstversion,
-	AS_HELP_STRING([--with-gstversion],[use gstreamer version (major.minor)]),
-	[GST_MAJORMINOR=$withval],[GST_MAJORMINOR=0.10])
-
-PKG_CHECK_MODULES(GSTREAMER, gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR)
-PKG_CHECK_MODULES(BASE, [freetype2 fribidi gstreamer-$GST_MAJORMINOR gstreamer-pbutils-$GST_MAJORMINOR libdvbsi++ libpng libxml-2.0 sigc++-1.2 libssl libcrypto])
+dnl versions of plugins-base
+PKG_CHECK_MODULES(TUXTXT, tuxbox-tuxtxt)
+PKG_CHECK_MODULES(BASE, [freetype2 fribidi glib-2.0 libdvbsi++ libpng libxml-2.0 sigc++-2.0 libssl libcrypto])
 PKG_CHECK_MODULES(LIBDDVD, libdreamdvd, HAVE_LIBDDVD="yes", HAVE_LIBDDVD="no")
 AM_CONDITIONAL(HAVE_LIBDDVD, test "$HAVE_LIBDDVD" = "yes")
+PKG_CHECK_MODULES(AVAHI, avahi-client)
 
+AC_CHECK_LIB([udfread], [udfread_init])
 AC_CHECK_LIB([dl], [dlopen], [LIBDL_LIBS="-ldl"], [AC_MSG_ERROR([Could not find libdl])])
 AC_SUBST(LIBDL_LIBS)
 AC_CHECK_LIB([jpeg], [jpeg_set_defaults], [LIBJPEG_LIBS="-ljpeg"], [AC_MSG_ERROR([Could not find libjpeg])])
 AC_SUBST(LIBJPEG_LIBS)
 AC_CHECK_LIB([ungif], [DGifOpen], [LIBGIF_LIBS="-lungif"], [AC_CHECK_LIB([gif], [DGifOpen], [LIBGIF_LIBS="-lgif"], [AC_MSG_ERROR([Could not find libgif or libungif])])])
 AC_SUBST(LIBGIF_LIBS)
+
+AC_ARG_WITH(crashlogemail,
+	[  --with-crashlogemail=crash log email address],
+	[CRASHLOGEMAIL="$withval"],[CRASHLOGEMAIL="the OpenPLi forum"])
+AC_SUBST(CRASHLOGEMAIL)
+AC_DEFINE_UNQUOTED(CRASH_EMAILADDR,"$CRASHLOGEMAIL",[crash log email address])
 
 AC_ARG_WITH(boxtype,
 	[  --with-boxtype=NAME box type [[none,dm7025,dm800...]]],
@@ -58,9 +62,6 @@ if test `echo "$BOXTYPE" | cut -b 1-2` == "dm"; then
 	AC_DEFINE(DREAMBOX, 1, [Dreambox hardware])
 	AC_DEFINE(KEY_PLAY_ACTUALLY_IS_KEY_PLAYPAUSE, 1,[define when rc sends a KEY_PLAY event for its KEY_PLAYPAUSE key])
 fi
-if test "$BOXTYPE" == "vusolo2" -o "$BOXTYPE" == "vuduo2" -o "$BOXTYPE" == "vusolose" -o "$BOXTYPE" == "vusolo4k" -o "$BOXTYPE" == "vuzero"; then
-	AC_DEFINE(VUPLUS_RC_WORKAROUND, 1, [workaround for problem with vuplus event/rc driver])
-fi
 
 AC_ARG_WITH(textlcd,
 	AC_HELP_STRING([--with-textlcd], [use ascii based lcd, yes or no]),
@@ -72,11 +73,17 @@ if test x"$withtextlcd" != xno ; then
 fi
 AM_CONDITIONAL(HAVE_TEXTLCD, test x"$withtextlcd" != xno)
 
+AC_ARG_WITH(7segment,
+	AC_HELP_STRING([--with-7segment], [use 7 segment lcd, yes or no]),
+	[[TEXTSKIN="7segment"]],
+	[[TEXTSKIN="default"]]
+)
+AC_SUBST(TEXTSKIN)
+
 if test `echo "$BOXTYPE" | cut -b 1-7` == "mbmicro"; then
 	AC_DEFINE(FORCE_NO_BLENDING_ACCELERATION, 1,[define when the framebuffer acceleration does not have alphablending support, though the autodetection might indicate that it does])
 	AC_DEFINE(FORCE_NO_FILL_ACCELERATION, 1,[define when the framebuffer acceleration does not have fill support])
 	AC_DEFINE(FORCE_ADVANCED_REMOTE, 1,[define to fixup the input device identification when the remote control is actually an 'advanced' remote (with play/forward/rewind keys)])
-	AC_DEFINE(VUPLUS_RC_WORKAROUND, 1, [workaround for problem with vuplus event/rc driver])
 	AC_DEFINE(KEY_PLAY_ACTUALLY_IS_KEY_PLAYPAUSE, 1,[define when rc sends a KEY_PLAY event for its KEY_PLAYPAUSE key])
 fi
 
@@ -124,8 +131,9 @@ if test "$with_po" = "yes"; then
 	AC_PATH_PROG(MSGINIT, msginit)
 	AC_PATH_PROG(MSGMERGE, msgmerge)
 	AC_PATH_PROG(MSGUNIQ, msguniq)
+	AC_PATH_PROG(MSGATTRIB, msgattrib)
 	AC_PATH_PROG(XGETTEXT, xgettext)
-	if test -z "$MSGINIT" -o -z "$MSGMERGE" -o -z "$MSGUNIQ" -o -z "$XGETTEXT"; then
+	if test -z "$MSGINIT" -o -z "$MSGMERGE" -o -z "$MSGUNIQ" -o -z "$MSGATTRIB" -o -z "$XGETTEXT"; then
 		AC_MSG_ERROR([Could not find required gettext tools])
 	fi
 fi
@@ -190,9 +198,63 @@ if test x"$with_amlogic" = xyes ; then
 	PKG_CHECK_MODULES(DVBCSA, libdvbcsa)
 fi
 
+AC_ARG_WITH(alphablendingacceleration,
+	AC_HELP_STRING([--with-alphablendingacceleration=never/always/auto], [alphablending acceleration strategy: never accelerate / always accelerate / automatically decide when to accelerate (default)]),
+	[[with_alphablendingacceleration=$withval]],
+	[[with_alphablendingacceleration=auto]]
+)
 
-ENIGMA2_CFLAGS="-fno-rtti -fno-exceptions"
+if test x"$with_alphablendingacceleration" = xnever ; then
+	AC_DEFINE_UNQUOTED(FORCE_NO_BLENDING_ACCELERATION, 1, [Do not attempt to accelerate alphablending blits])
+elif test x"$with_alphablendingacceleration" = xalways ; then
+	AC_DEFINE_UNQUOTED(FORCE_ALPHABLENDING_ACCELERATION, 1, [Accelerate alphablending blits])
+fi
+
+AC_ARG_WITH(accelerationthreshold,
+	AC_HELP_STRING([--with-accelerationthreshold=n], [use acceleration threshold of n bytes]),
+	[[with_accelerationthreshold=$withval]],
+	[[with_accelerationthreshold=48000]]
+)
+
+AC_DEFINE_UNQUOTED(GFX_SURFACE_ACCELERATION_THRESHOLD, $with_accelerationthreshold,[Configure threshold for accelerated surfaces (in bytes)])
+
+AC_ARG_WITH(fillaccelerationthreshold,
+	AC_HELP_STRING([--with-fillaccelerationthreshold=n], [use fill acceleration threshold of n bytes]),
+	[[with_fillaccelerationthreshold=$withval]],
+	[[with_fillaccelerationthreshold=80000]]
+)
+
+AC_DEFINE_UNQUOTED(GFX_SURFACE_FILL_ACCELERATION_THRESHOLD, $with_fillaccelerationthreshold,[Configure threshold for accelerated fill operations (in bytes)])
+
+AC_ARG_WITH(blitaccelerationthreshold,
+	AC_HELP_STRING([--with-blitaccelerationthreshold=n], [use blit acceleration threshold of n bytes]),
+	[[with_blitaccelerationthreshold=$withval]],
+	[[with_blitaccelerationthreshold=0]]
+)
+
+AC_DEFINE_UNQUOTED(GFX_SURFACE_BLIT_ACCELERATION_THRESHOLD, $with_blitaccelerationthreshold,[Configure threshold for accelerated blit operations (in bytes)])
+
+AC_ARG_WITH(accelerationaccumulation,
+	AC_HELP_STRING([--with-accelerationaccumulation], [accumulate blit/fill acceleration operations]),
+	[[with_accelerationaccumulation=$withval]],
+	[[with_accelerationaccumulation=no]]
+)
+
+if test x"$with_accelerationaccumulation" = xyes ; then
+	AC_DEFINE(SUPPORT_ACCUMULATED_ACCELERATION_OPERATIONS, 1,[Accumulate blit/fill acceleration operations])
+fi
+
+AC_CHECK_HEADERS([sys/klog.h])
+AC_CHECK_FUNCS([klogctl])
+
+AC_CHECK_HEADERS([shadow.h])
+AC_CHECK_LIB([crypt], [crypt], [BASE_LIBS+=" -lcrypt"], [AC_MSG_ERROR([Could not find crypt])])
+AC_CHECK_LIB([rt], [clock_gettime], [BASE_LIBS+=" -lrt"], [AC_MSG_ERROR([Could not find rt])])
+
+ENIGMA2_CFLAGS="-fno-rtti -fno-exceptions -rdynamic -funwind-tables"
 AC_SUBST(ENIGMA2_CFLAGS)
+
+AX_CXX_COMPILE_STDCXX_11([ext],[mandatory])
 
 CPPFLAGS="$CPPFLAGS $PYTHON_CPPFLAGS"
 CFLAGS="$CFLAGS -Wall"
