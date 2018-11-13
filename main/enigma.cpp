@@ -37,6 +37,8 @@
 
 #include <gst/gst.h>
 
+bool verbose = false;
+
 #ifdef OBJECT_DEBUG
 int object_total_remaining;
 
@@ -198,6 +200,15 @@ int main(int argc, char **argv)
 #endif
 
 	gst_init(&argc, &argv);
+
+	for (int i = 0; i < argc; i++)
+	{
+		if (!(strcmp(argv[i], "--verbose")))
+		{
+			verbose = true;
+			break;
+		}
+	}
 
 	// set pythonpath if unset
 	setenv("PYTHONPATH", eEnv::resolve("${libdir}/enigma2/python").c_str(), 0);
